@@ -2,7 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 
-let client: ReturnType<typeof createClient> | null = null;
+let client: any = null;
 
 export function getSupabaseBrowser() {
   if (client) return client;
