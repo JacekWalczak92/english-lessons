@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 import type { Lesson } from "@/lib/types";
 
-function localDate() {
-  const now = new Date();
+/** Data w strefie użytkownika — `new Date().toISOString()` potrafi cofnąć o dobę. */
+function localDate(now = new Date()) {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
@@ -39,54 +39,61 @@ export default function DashboardPage() {
       if (queryError) throw queryError;
       setLessons((data ?? []) as Lesson[]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Nie udało się pobrać lekcji");
+      setError(e instanceof Error ? e.message : "Nie udało się pobrać lekcji.");
     } finally {
       setBusy(false);
     }
   }, [router]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   async function createLesson() {
+    if (creating) return;
     setCreating(true);
     setError("");
     try {
       const supabase = getSupabaseBrowser();
       const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) throw new Error("Sesja wygasła");
+      if (!userData.user) throw new Error("Sesja wygasła — zaloguj się ponownie.");
+      const today = localDate();
       const { data, error: insertError } = await supabase
         .from("english_lessons")
         .insert({
           owner_id: userData.user.id,
-          lesson_date: localDate(),
-          title: "English lesson",
+          lesson_date: today,
+          title: `Lekcja ${today}`,
         })
-        .select("*")
+        .select("id")
         .single();
       if (insertError) throw insertError;
       router.push(`/lesson/?id=${encodeURIComponent(data.id)}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Nie udało się utworzyć lekcji");
-    } finally {
+      setError(e instanceof Error ? e.message : "Nie udało się utworzyć lekcji.");
       setCreating(false);
     }
   }
 
   async function signOut() {
-    const supabase = getSupabaseBrowser();
-    await supabase.auth.signOut();
+    await getSupabaseBrowser().auth.signOut();
     router.replace("/");
   }
 
-  async function removeLesson(id: string) {
-    if (!window.confirm("Usunąć tę lekcję razem z fiszkami?")) return;
+  async function removeLesson(lesson: Lesson) {
+    if (!window.confirm(`Usunąć lekcję „${lesson.title}” razem z fiszkami?`)) return;
+    const snapshot = lessons;
+    setLessons((current) => current.filter((item) => item.id !== lesson.id));
     try {
-      const supabase = getSupabaseBrowser();
-      const { error: deleteError } = await supabase.from("english_lessons").delete().eq("id", id);
+      const { error: deleteError } = await getSupabaseBrowser()
+        .from("english_lessons")
+        .delete()
+        .eq("id", lesson.id);
       if (deleteError) throw deleteError;
-      setLessons((current) => current.filter((x) => x.id !== id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Nie udało się usunąć lekcji");
+      // Przywracamy listę, żeby interfejs nie kłamał o skutecznym usunięciu.
+      setLessons(snapshot);
+      setError(e instanceof Error ? e.message : "Nie udało się usunąć lekcji.");
     }
   }
 
@@ -98,12 +105,21 @@ export default function DashboardPage() {
           <h1 style={{ marginBottom: 0 }}>Lekcje angielskiego</h1>
         </div>
         <div className="topbar-actions">
-          <button className="btn" onClick={createLesson} disabled={creating}>{creating ? "Tworzę…" : "+ Nowa lekcja"}</button>
-          <button className="btn ghost" onClick={signOut}>Wyloguj</button>
+          <button className="btn" onClick={createLesson} disabled={creating}>
+            {creating ? "Tworzę…" : "+ Nowa lekcja"}
+          </button>
+          <button className="btn ghost" onClick={signOut}>
+            Wyloguj
+          </button>
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+
       {busy ? (
         <div className="panel empty">Pobieram lekcje…</div>
       ) : lessons.length === 0 ? (
@@ -123,12 +139,20 @@ export default function DashboardPage() {
                   <span className={`badge ${lesson.status === "finished" ? "finished" : ""}`}>
                     {lesson.status === "finished" ? "zakończona" : "w toku"}
                   </span>
+                  {!lesson.share_enabled && <span className="badge muted-badge">link wyłączony</span>}
                   {lesson.last_exported_at && <span>• Drive ✓</span>}
                 </div>
               </div>
               <div className="btn-row">
-                <Link className="btn secondary small-btn" href={`/lesson/?id=${encodeURIComponent(lesson.id)}`}>Otwórz</Link>
-                <button className="btn danger small-btn" onClick={() => removeLesson(lesson.id)}>Usuń</button>
+                <Link
+                  className="btn secondary small-btn"
+                  href={`/lesson/?id=${encodeURIComponent(lesson.id)}`}
+                >
+                  Otwórz
+                </Link>
+                <button className="btn danger small-btn" onClick={() => removeLesson(lesson)}>
+                  Usuń
+                </button>
               </div>
             </article>
           ))}

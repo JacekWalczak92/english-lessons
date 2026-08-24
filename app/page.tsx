@@ -1,9 +1,12 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { getSupabaseBrowser } from "@/lib/supabase-browser";
+import { Field } from "@/components/Field";
+import { MISSING_CONFIG_MESSAGE, getSupabaseBrowser, readPublicConfig } from "@/lib/supabase-browser";
 import { absoluteSiteUrl } from "@/lib/site-path";
+
+type Feedback = { kind: "success" | "error"; text: string } | null;
 
 export default function HomePage() {
   const router = useRouter();
@@ -11,23 +14,36 @@ export default function HomePage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [feedback, setFeedback] = useState<Feedback>(null);
+
+  const configured = readPublicConfig() !== null;
 
   useEffect(() => {
-    try {
-      const supabase = getSupabaseBrowser();
-      supabase.auth.getSession().then(({ data }) => {
-        if (data.session) router.replace("/dashboard");
-      });
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Brak konfiguracji");
+    if (!configured) {
+      setCheckingSession(false);
+      setFeedback({ kind: "error", text: MISSING_CONFIG_MESSAGE });
+      return;
     }
-  }, [router]);
+    let active = true;
+    getSupabaseBrowser()
+      .auth.getSession()
+      .then(({ data }) => {
+        if (!active) return;
+        if (data.session) router.replace("/dashboard");
+        else setCheckingSession(false);
+      })
+      .catch(() => active && setCheckingSession(false));
+    return () => {
+      active = false;
+    };
+  }, [configured, router]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (busy || !configured) return;
     setBusy(true);
-    setMessage("");
+    setFeedback(null);
     try {
       const supabase = getSupabaseBrowser();
       if (mode === "login") {
@@ -42,10 +58,17 @@ export default function HomePage() {
         });
         if (error) throw error;
         if (data.session) router.push("/dashboard");
-        else setMessage("Konto utworzone. Jeśli Supabase wymaga potwierdzenia e-maila, otwórz wiadomość i potwierdź konto.");
+        else
+          setFeedback({
+            kind: "success",
+            text: "Konto utworzone. Jeśli Supabase wymaga potwierdzenia e-maila, otwórz wiadomość i potwierdź konto.",
+          });
       }
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Nie udało się zalogować");
+    } catch (error) {
+      setFeedback({
+        kind: "error",
+        text: error instanceof Error ? error.message : "Nie udało się zalogować.",
+      });
     } finally {
       setBusy(false);
     }
@@ -58,23 +81,66 @@ export default function HomePage() {
         <h1>English Lessons</h1>
         <p className="muted">Wspólny, szybki edytor fiszek używany podczas lekcji.</p>
 
-        <form onSubmit={submit} className="stack" style={{ marginTop: 24 }}>
-          <div className="field">
-            <label>E-mail</label>
-            <input className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          </div>
-          <div className="field">
-            <label>Hasło</label>
-            <input className="input" type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} required />
-          </div>
-          <button className="btn" disabled={busy}>{busy ? "Chwila…" : mode === "login" ? "Zaloguj" : "Utwórz konto"}</button>
-        </form>
+        {checkingSession ? (
+          <p className="muted" style={{ marginTop: 24 }}>
+            Sprawdzam sesję…
+          </p>
+        ) : (
+          <>
+            <form onSubmit={submit} className="stack" style={{ marginTop: 24 }}>
+              <Field label="E-mail">
+                {(props) => (
+                  <input
+                    {...props}
+                    className="input"
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    disabled={!configured}
+                    onChange={(event) => setEmail(event.target.value)}
+                    required
+                  />
+                )}
+              </Field>
+              <Field label="Hasło" hint={mode === "signup" ? "Minimum 6 znaków." : undefined}>
+                {(props) => (
+                  <input
+                    {...props}
+                    className="input"
+                    type="password"
+                    autoComplete={mode === "login" ? "current-password" : "new-password"}
+                    minLength={6}
+                    value={password}
+                    disabled={!configured}
+                    onChange={(event) => setPassword(event.target.value)}
+                    required
+                  />
+                )}
+              </Field>
+              <button className="btn" disabled={busy || !configured}>
+                {busy ? "Chwila…" : mode === "login" ? "Zaloguj" : "Utwórz konto"}
+              </button>
+            </form>
 
-        {message && <p className={message.startsWith("Konto") ? "success" : "error"}>{message}</p>}
+            <button
+              className="btn ghost"
+              style={{ width: "100%", marginTop: 8 }}
+              disabled={!configured}
+              onClick={() => {
+                setMode(mode === "login" ? "signup" : "login");
+                setFeedback(null);
+              }}
+            >
+              {mode === "login" ? "Pierwszy raz? Utwórz konto" : "Mam konto — zaloguj"}
+            </button>
+          </>
+        )}
 
-        <button className="btn ghost" style={{ width: "100%", marginTop: 8 }} onClick={() => { setMode(mode === "login" ? "signup" : "login"); setMessage(""); }}>
-          {mode === "login" ? "Pierwszy raz? Utwórz konto" : "Mam konto — zaloguj"}
-        </button>
+        {feedback && (
+          <p className={feedback.kind === "success" ? "success" : "error"} role="alert">
+            {feedback.text}
+          </p>
+        )}
       </section>
     </main>
   );

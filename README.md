@@ -1,4 +1,4 @@
-# J-Learner · English Lessons — GitHub Pages edition
+# J-Learner · English Lessons v1.3.0 — GitHub Pages edition
 
 Statyczna miniaplikacja do wspólnego tworzenia fiszek podczas lekcji angielskiego.
 Frontend jest publikowany na **GitHub Pages**, dane są trzymane w **Supabase**, a tajny link nauczyciela obsługuje **Supabase Edge Function**. Eksport lekcji na Google Drive pozostaje zgodny z importerem AnkiFiszki v128.
@@ -29,6 +29,30 @@ GitHub Pages (Next.js static export)
 - `.github/workflows/deploy-pages.yml` publikuje frontend.
 - `.github/workflows/deploy-supabase-function.yml` publikuje Edge Function.
 - `NEXT_PUBLIC_BASE_PATH` jest ustawiany automatycznie dla repo typu `username.github.io/nazwa-repo`.
+
+## Struktura kodu
+
+```text
+app/            trasy Next.js (logowanie, lista lekcji, edytor)
+components/     Field + components/lesson/* (nagłówek, fiszka, import, link, pasek narzędzi)
+lib/            domena, typy, klient API, autosave (use-lesson.ts), Google Drive
+supabase/       migracja SQL + Edge Function (_shared/domain.ts to kopia lib/domain.ts)
+tests/          testy jednostkowe na node:test
+```
+
+Stan edytora — pobieranie, polling, kolejka autosave i ponawianie — mieszka w
+`lib/use-lesson.ts`. Komponenty tylko go konsumują.
+
+## Testy
+
+```bash
+npm run check     # tsc --noEmit + testy jednostkowe
+npm test          # same testy (node:test, bez dodatkowych zależności)
+```
+
+Test `tests/domain-sync.test.ts` porównuje `lib/domain.ts` z kopią dla Deno w
+`supabase/functions/_shared/domain.ts`. Dodanie nowego typu fiszki po jednej
+stronie bez drugiej wywali build, zanim rozjazd trafi na produkcję.
 
 ## 1. Supabase — baza danych
 
@@ -155,6 +179,24 @@ npm run dev
 
 Lokalnie `NEXT_PUBLIC_BASE_PATH` zostaw pusty.
 
+
+## Import słówek
+
+W edytorze lekcji dostępny jest przycisk **Importuj słówka**. Import przyjmuje wiele fiszek naraz w formacie:
+
+```text
+POLSKI;ANGIELSKI;TYP;NOTATKA;WYMOWA;PRZYKŁAD
+```
+
+Przed wysłaniem widać podgląd: ile fiszek zostanie dodanych, ile duplikatów
+pominięto i które wiersze mają błąd (wszystkie naraz, z numerami linii). Pomijane
+są nagłówek, puste linie i komentarze `#`; jako separator działa też tabulator,
+więc wklejka z arkusza kalkulacyjnego przechodzi bez konwersji.
+
+Przycisk **Pokaż prompt AI** / **Kopiuj prompt** daje gotowy prompt do
+przekształcania surowych notatek z lekcji na ten format. Przykładowa lista jest
+w `import_examples/stara_lekcja_gotowa_do_importu.txt`.
+
 ## Format i Android
 
 Format JSON nie zmienił się względem poprzedniej wersji. Przygotowany wcześniej **AnkiFiszki v128** nie wymaga kolejnej zmiany i nadal importuje pliki z:
@@ -165,6 +207,27 @@ J-Learner/EnglishLessons/
 
 Ponowny import tej samej lekcji aktualizuje treść bez resetowania postępu SM-2.
 
+## Link dla nauczyciela
+
+W edytorze (tylko właściciel) przycisk **🔗 Link dla nauczyciela** pozwala:
+
+- skopiować link,
+- wyłączyć udostępnianie (`share_enabled`) — istniejący link przestaje otwierać lekcję,
+- wygenerować nowy token, jeśli stary link wyciekł. Stary przestaje działać natychmiast.
+
+Link zawiera 64-znakowy sekret i daje prawo edycji tej jednej lekcji bez logowania —
+traktuj go jak hasło.
+
 ## Ważne bezpieczeństwo
 
 Do repozytorium i do `NEXT_PUBLIC_*` **nie wkładaj** `sb_secret_...`, `service_role` ani innych kluczy administracyjnych Supabase. Edge Function korzysta z wbudowanego `SUPABASE_SERVICE_ROLE_KEY` po stronie Supabase i ten klucz nigdy nie jest wysyłany do GitHub Pages.
+
+Opcjonalnie możesz zawęzić CORS Edge Function do własnej domeny. W **Supabase →
+Edge Functions → Secrets** ustaw:
+
+```text
+ALLOWED_ORIGINS=https://TWOJ_LOGIN.github.io
+```
+
+Bez tego sekretu funkcja odpowiada z `Access-Control-Allow-Origin: *` (jak dotąd);
+dostępu i tak pilnuje JWT właściciela albo tajny token lekcji.

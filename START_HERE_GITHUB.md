@@ -1,4 +1,4 @@
-# Uruchomienie — 7 kroków
+# Uruchomienie — 7 kroków (v1.3.0)
 
 1. Uruchom `supabase/migrations/20260824_english_lessons.sql` w Supabase SQL Editor (jeśli jeszcze nie było).
 2. Utwórz repo GitHub, np. `english-lessons`, i wrzuć do niego zawartość tego folderu.
@@ -9,3 +9,7 @@
 7. Zrób push do `main`. Po przejściu obu workflowów otwórz Pages, zaloguj się, utwórz lekcję i sprawdź „Kopiuj link dla nauczyciela”.
 
 Format JSON jest ten sam, więc AnkiFiszki v128 pozostaje kompatybilne bez zmian.
+
+Aktualizacja z v1.2.0: nie ma nowej migracji SQL ani zmian w konfiguracji.
+Podmieniasz pliki, robisz push — oba workflowy wdrożą frontend i Edge Function.
+Przed pushem możesz odpalić lokalnie `npm run check` (typy + testy).

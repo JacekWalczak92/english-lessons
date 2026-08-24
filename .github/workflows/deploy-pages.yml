@@ -56,6 +56,9 @@ jobs:
       - name: Type check
         run: npm run lint
 
+      - name: Unit tests
+        run: npm test
+
       - name: Build static export
         run: npm run build
 

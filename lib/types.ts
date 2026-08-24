@@ -1,14 +1,15 @@
-export const CARD_TYPES = [
-  "translation_sentence",
-  "word_phrase",
-  "pronunciation",
-  "british",
-  "custom",
-] as const;
+import type { CardType, LessonStatus, ReviewDirection } from "./domain.ts";
 
-export type CardType = (typeof CARD_TYPES)[number];
-export type ReviewDirection = "EN_TO_PL" | "PL_TO_EN" | "PRONUNCIATION";
-export type LessonStatus = "draft" | "finished";
+export type { CardType, LessonStatus, ReviewDirection };
+export {
+  CARD_TYPES,
+  REVIEW_DIRECTIONS,
+  LESSON_STATUSES,
+  FIELD_LIMITS,
+  defaultDirection,
+  directionForTypeChange,
+  isCardType,
+} from "./domain.ts";
 
 export type Lesson = {
   id: string;
@@ -44,11 +45,43 @@ export type LessonCard = {
   updated_at: string;
 };
 
+export type LessonAccess = "owner" | "shared";
+
 export type LessonPayload = {
   lesson: Lesson;
   cards: LessonCard[];
-  access: "owner" | "shared";
+  access: LessonAccess;
 };
+
+/** Odpowiedź szybkiej ścieżki pollingu, gdy nic się nie zmieniło. */
+export type LessonUnchanged = { unchanged: true };
+
+export type LessonPollResult = LessonPayload | LessonUnchanged;
+
+export function isUnchanged(result: LessonPollResult): result is LessonUnchanged {
+  return (result as LessonUnchanged).unchanged === true;
+}
+
+/** Pola fiszki, które klient może modyfikować. */
+export type CardPatch = Partial<Omit<LessonCard, "id" | "lesson_id" | "created_at" | "updated_at">>;
+
+/** Pola lekcji, które klient może modyfikować. */
+export type LessonPatch = Partial<
+  Pick<
+    Lesson,
+    | "lesson_date"
+    | "title"
+    | "teacher_name"
+    | "status"
+    | "share_enabled"
+    | "drive_file_id"
+    | "drive_file_name"
+    | "last_exported_at"
+  >
+> & { rotate_share_token?: true };
+
+export type NewCardInput = Pick<LessonCard, "card_type" | "review_direction" | "order_index"> &
+  Partial<Omit<CardPatch, "card_type" | "review_direction" | "order_index">>;
 
 export type LessonExportV1 = {
   schemaVersion: 1;
@@ -74,19 +107,26 @@ export type LessonExportV1 = {
   }>;
 };
 
-export function buildLessonExport(lesson: Lesson, cards: LessonCard[]): LessonExportV1 {
-  const exportedAt = new Date().toISOString();
+/**
+ * Format eksportu jest kontraktem z importerem AnkiFiszki — nie zmieniamy go
+ * bez podbicia `schemaVersion` po obu stronach.
+ */
+export function buildLessonExport(
+  lesson: Lesson,
+  cards: LessonCard[],
+  now: Date = new Date(),
+): LessonExportV1 {
   return {
     schemaVersion: 1,
     lesson: {
       id: lesson.id,
       date: lesson.lesson_date,
-      title: lesson.title,
-      teacher: lesson.teacher_name ?? "",
-      exportedAt,
+      title: lesson.title.trim(),
+      teacher: lesson.teacher_name?.trim() ?? "",
+      exportedAt: now.toISOString(),
     },
     cards: [...cards]
-      .sort((a, b) => a.order_index - b.order_index)
+      .sort((a, b) => a.order_index - b.order_index || a.created_at.localeCompare(b.created_at))
       .filter((card) => card.english.trim() || card.polish.trim())
       .map((card) => ({
         id: card.id,
@@ -104,18 +144,19 @@ export function buildLessonExport(lesson: Lesson, cards: LessonCard[]): LessonEx
   };
 }
 
-export function lessonFileName(lesson: Lesson) {
+/** Nazwa pliku na Drive — stabilna dla danej lekcji, żeby eksport nadpisywał, a nie duplikował. */
+export function lessonFileName(lesson: Pick<Lesson, "id" | "lesson_date">) {
   return `${lesson.lesson_date}_${lesson.id.slice(0, 8)}.json`;
 }
 
-export function defaultDirection(type: CardType): ReviewDirection {
-  switch (type) {
-    case "pronunciation":
-      return "PRONUNCIATION";
-    case "translation_sentence":
-    case "word_phrase":
-      return "PL_TO_EN";
-    default:
-      return "EN_TO_PL";
-  }
+/**
+ * Znacznik stanu lekcji używany przez polling: najnowszy `updated_at`
+ * w lekcji i fiszkach. Pozwala serwerowi odpowiedzieć `{ unchanged: true }`
+ * zamiast przesyłać kilkaset fiszek co kilka sekund.
+ */
+export function lessonSyncStamp(payload: LessonPayload): string {
+  return payload.cards.reduce(
+    (newest, card) => (card.updated_at > newest ? card.updated_at : newest),
+    payload.lesson.updated_at,
+  );
 }
