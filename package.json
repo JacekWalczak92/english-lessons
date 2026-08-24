@@ -1,0 +1,24 @@
+{
+  "name": "j-learner-english-lessons",
+  "version": "1.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "tsc --noEmit",
+    "preview": "npx serve out"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.112.3",
+    "next": "16.3.2",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "26.2.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "typescript": "7.0.2"
+  }
+}

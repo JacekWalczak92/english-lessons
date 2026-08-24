@@ -1,0 +1,2 @@
+[functions.english-lesson-api]
+verify_jwt = false
