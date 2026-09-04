@@ -3,8 +3,19 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { JoinLessonBox } from "@/components/dashboard/JoinLessonBox";
+import { LessonList } from "@/components/dashboard/LessonList";
+import {
+  createLesson,
+  deleteLesson,
+  leaveLesson,
+  listJoinedLessons,
+  listOwnedLessons,
+  loadProfile,
+  updateProfile,
+} from "@/lib/account";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
-import type { Lesson } from "@/lib/types";
+import type { AppProfile, AppRole, Lesson } from "@/lib/types";
 
 /** Data w strefie użytkownika — `new Date().toISOString()` potrafi cofnąć o dobę. */
 function localDate(now = new Date()) {
@@ -16,7 +27,9 @@ function localDate(now = new Date()) {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [profile, setProfile] = useState<AppProfile | null>(null);
+  const [owned, setOwned] = useState<Lesson[]>([]);
+  const [joined, setJoined] = useState<Lesson[]>([]);
   const [busy, setBusy] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
@@ -31,13 +44,14 @@ export default function DashboardPage() {
         router.replace("/");
         return;
       }
-      const { data, error: queryError } = await supabase
-        .from("english_lessons")
-        .select("*")
-        .order("lesson_date", { ascending: false })
-        .order("created_at", { ascending: false });
-      if (queryError) throw queryError;
-      setLessons((data ?? []) as Lesson[]);
+      const [loadedProfile, ownedLessons, joinedLessons] = await Promise.all([
+        loadProfile(),
+        listOwnedLessons(),
+        listJoinedLessons(),
+      ]);
+      setProfile(loadedProfile);
+      setOwned(ownedLessons);
+      setJoined(joinedLessons);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Nie udało się pobrać lekcji.");
     } finally {
@@ -49,29 +63,59 @@ export default function DashboardPage() {
     void load();
   }, [load]);
 
-  async function createLesson() {
+  async function addLesson(kind: "lesson" | "set") {
     if (creating) return;
     setCreating(true);
     setError("");
     try {
-      const supabase = getSupabaseBrowser();
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) throw new Error("Sesja wygasła — zaloguj się ponownie.");
       const today = localDate();
-      const { data, error: insertError } = await supabase
-        .from("english_lessons")
-        .insert({
-          owner_id: userData.user.id,
-          lesson_date: today,
-          title: `Lekcja ${today}`,
-        })
-        .select("id")
-        .single();
-      if (insertError) throw insertError;
-      router.push(`/lesson/?id=${encodeURIComponent(data.id)}`);
+      const id = await createLesson({
+        title: kind === "set" ? "Nowy zestaw słówek" : `Lekcja ${today}`,
+        lessonDate: today,
+        kind,
+        teacherName: profile?.display_name || null,
+      });
+      router.push(`/lesson/?id=${encodeURIComponent(id)}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Nie udało się utworzyć lekcji.");
       setCreating(false);
+    }
+  }
+
+  async function removeLesson(lesson: Lesson) {
+    if (!window.confirm(`Usunąć „${lesson.title}” razem z fiszkami?`)) return;
+    const snapshot = owned;
+    setOwned((current) => current.filter((item) => item.id !== lesson.id));
+    try {
+      await deleteLesson(lesson.id);
+    } catch (e) {
+      // Przywracamy listę, żeby interfejs nie kłamał o skutecznym usunięciu.
+      setOwned(snapshot);
+      setError(e instanceof Error ? e.message : "Nie udało się usunąć lekcji.");
+    }
+  }
+
+  async function leave(lesson: Lesson) {
+    if (!window.confirm(`Wypisać się z lekcji „${lesson.title}”?`)) return;
+    const snapshot = joined;
+    setJoined((current) => current.filter((item) => item.id !== lesson.id));
+    try {
+      await leaveLesson(lesson.id);
+    } catch (e) {
+      setJoined(snapshot);
+      setError(e instanceof Error ? e.message : "Nie udało się wypisać z lekcji.");
+    }
+  }
+
+  async function switchRole(role: AppRole) {
+    if (!profile || profile.role === role) return;
+    const previous = profile;
+    setProfile({ ...profile, role });
+    try {
+      await updateProfile({ role });
+    } catch (e) {
+      setProfile(previous);
+      setError(e instanceof Error ? e.message : "Nie udało się zmienić roli.");
     }
   }
 
@@ -80,34 +124,53 @@ export default function DashboardPage() {
     router.replace("/");
   }
 
-  async function removeLesson(lesson: Lesson) {
-    if (!window.confirm(`Usunąć lekcję „${lesson.title}” razem z fiszkami?`)) return;
-    const snapshot = lessons;
-    setLessons((current) => current.filter((item) => item.id !== lesson.id));
-    try {
-      const { error: deleteError } = await getSupabaseBrowser()
-        .from("english_lessons")
-        .delete()
-        .eq("id", lesson.id);
-      if (deleteError) throw deleteError;
-    } catch (e) {
-      // Przywracamy listę, żeby interfejs nie kłamał o skutecznym usunięciu.
-      setLessons(snapshot);
-      setError(e instanceof Error ? e.message : "Nie udało się usunąć lekcji.");
-    }
-  }
+  const isTeacher = profile?.role === "teacher";
+  const lessons = owned.filter((lesson) => lesson.lesson_kind === "lesson");
+  const sets = owned.filter((lesson) => lesson.lesson_kind === "set");
 
   return (
     <main className="shell">
       <div className="topbar">
         <div>
           <div className="brand">J-Learner</div>
-          <h1 style={{ marginBottom: 0 }}>Lekcje angielskiego</h1>
+          <h1 style={{ marginBottom: 0 }}>
+            {isTeacher ? "Lekcje angielskiego" : "Moje fiszki z lekcji"}
+          </h1>
+          {profile && (
+            <div className="lesson-meta" style={{ marginTop: 6 }}>
+              <span>{profile.display_name || "konto bez nazwy"}</span>
+              <label className="role-switch">
+                <span className="sr-only">Rola konta</span>
+                <select
+                  className="select small-select"
+                  value={profile.role}
+                  onChange={(event) => void switchRole(event.target.value as AppRole)}
+                >
+                  <option value="teacher">nauczyciel</option>
+                  <option value="student">uczeń</option>
+                </select>
+              </label>
+            </div>
+          )}
         </div>
         <div className="topbar-actions">
-          <button className="btn" onClick={createLesson} disabled={creating}>
-            {creating ? "Tworzę…" : "+ Nowa lekcja"}
-          </button>
+          <Link className="btn ghost" href="/library">
+            Biblioteka
+          </Link>
+          {isTeacher && (
+            <>
+              <button className="btn" onClick={() => void addLesson("lesson")} disabled={creating}>
+                {creating ? "Tworzę…" : "+ Nowa lekcja"}
+              </button>
+              <button
+                className="btn secondary"
+                onClick={() => void addLesson("set")}
+                disabled={creating}
+              >
+                + Nowy zestaw słówek
+              </button>
+            </>
+          )}
           <button className="btn ghost" onClick={signOut}>
             Wyloguj
           </button>
@@ -120,43 +183,58 @@ export default function DashboardPage() {
         </p>
       )}
 
+      {!isTeacher && <JoinLessonBox onJoined={() => void load()} />}
+
       {busy ? (
         <div className="panel empty">Pobieram lekcje…</div>
-      ) : lessons.length === 0 ? (
-        <div className="panel empty">
-          <h2>Nie ma jeszcze lekcji</h2>
-          <p>Utwórz pierwszą i wyślij nauczycielowi tajny link.</p>
-        </div>
+      ) : isTeacher ? (
+        <>
+          <LessonList
+            title="Lekcje na żywo"
+            emptyText="Utwórz lekcję i podaj uczniom kod dołączenia."
+            lessons={lessons}
+            showJoinCode
+            onDelete={(lesson) => void removeLesson(lesson)}
+          />
+          <LessonList
+            title="Gotowe zestawy słówek"
+            emptyText="Zestaw to gotowa lista słówek, którą publikujesz w bibliotece."
+            lessons={sets}
+            onDelete={(lesson) => void removeLesson(lesson)}
+          />
+          {joined.length > 0 && (
+            <LessonList
+              title="Lekcje, do których dołączyłeś"
+              emptyText=""
+              lessons={joined}
+              onLeave={(lesson) => void leave(lesson)}
+            />
+          )}
+        </>
       ) : (
-        <section className="dashboard-grid">
-          {lessons.map((lesson) => (
-            <article className="panel lesson-row" key={lesson.id}>
-              <div>
-                <div className="lesson-title">{lesson.title}</div>
-                <div className="lesson-meta">
-                  <span>{lesson.lesson_date}</span>
-                  {lesson.teacher_name && <span>• {lesson.teacher_name}</span>}
-                  <span className={`badge ${lesson.status === "finished" ? "finished" : ""}`}>
-                    {lesson.status === "finished" ? "zakończona" : "w toku"}
-                  </span>
-                  {!lesson.share_enabled && <span className="badge muted-badge">link wyłączony</span>}
-                  {lesson.last_exported_at && <span>• Drive ✓</span>}
-                </div>
-              </div>
-              <div className="btn-row">
-                <Link
-                  className="btn secondary small-btn"
-                  href={`/lesson/?id=${encodeURIComponent(lesson.id)}`}
-                >
-                  Otwórz
-                </Link>
-                <button className="btn danger small-btn" onClick={() => removeLesson(lesson)}>
-                  Usuń
-                </button>
-              </div>
-            </article>
-          ))}
-        </section>
+        <>
+          <LessonList
+            title="Lekcje z nauczycielem"
+            emptyText="Wpisz kod od nauczyciela powyżej, żeby dołączyć do lekcji."
+            lessons={joined}
+            onLeave={(lesson) => void leave(lesson)}
+          />
+          <LessonList
+            title="Moje własne lekcje i kopie z biblioteki"
+            emptyText="Skopiuj gotowy zestaw z biblioteki albo utwórz własną lekcję."
+            lessons={owned}
+            onDelete={(lesson) => void removeLesson(lesson)}
+            footer={
+              <button
+                className="btn secondary small-btn"
+                onClick={() => void addLesson("lesson")}
+                disabled={creating}
+              >
+                {creating ? "Tworzę…" : "+ Własna lekcja"}
+              </button>
+            }
+          />
+        </>
       )}
     </main>
   );

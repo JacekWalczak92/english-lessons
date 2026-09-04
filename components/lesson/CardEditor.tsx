@@ -15,7 +15,10 @@ type Props = {
   card: LessonCard;
   index: number;
   total: number;
+  /** Fiszka tylko do odczytu: cudza fiszka albo zakończona lekcja. */
   locked: boolean;
+  /** Podpis autora — pusty dla własnych fiszek, żeby nie zaśmiecać widoku. */
+  authorLabel?: string;
   onChange: (cardId: string, patch: CardPatch) => void;
   onDelete: (cardId: string) => void;
   onMove: (cardId: string, direction: -1 | 1) => void;
@@ -30,6 +33,7 @@ export const CardEditor = memo(function CardEditor({
   index,
   total,
   locked,
+  authorLabel,
   onChange,
   onDelete,
   onMove,
@@ -63,6 +67,8 @@ export const CardEditor = memo(function CardEditor({
         </select>
 
         <span className="card-index">#{index + 1}</span>
+
+        {authorLabel && <span className="badge author-badge">{authorLabel}</span>}
 
         <div className="btn-row">
           <button

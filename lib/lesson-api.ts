@@ -4,6 +4,7 @@ import { authHeaders } from "@/lib/browser-auth";
 import { MISSING_CONFIG_MESSAGE, readPublicConfig } from "@/lib/supabase-browser";
 import type {
   CardPatch,
+  DriveState,
   LessonCard,
   LessonPatch,
   LessonPayload,
@@ -123,5 +124,23 @@ export const lessonApi = {
 
   deleteCard(scope: LessonScope, cardId: string) {
     return request<void>({ ...scope, cardId, method: "DELETE" });
+  },
+
+  /**
+   * Stan eksportu na Drive. Właścicielowi zapisuje się w lekcji, uczniowi w jego
+   * członkostwie — każde konto ma własny plik w swoim Drive.
+   */
+  saveDrive(scope: LessonScope, state: DriveState) {
+    return request<{ drive: DriveState }>({
+      ...scope,
+      method: "POST",
+      query: { action: "drive" },
+      body: state,
+    });
+  },
+
+  /** Usunięcie ucznia z lekcji. Jego dotychczasowe fiszki zostają u nauczyciela. */
+  removeMember(scope: LessonScope, userId: string) {
+    return request<void>({ ...scope, method: "DELETE", query: { memberId: userId } });
   },
 };

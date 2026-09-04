@@ -8,6 +8,7 @@ export function QuickAddBar({
   importOpen,
   shareOpen,
   isOwner,
+  isStudent,
   onAdd,
   onToggleImport,
   onToggleShare,
@@ -16,6 +17,8 @@ export function QuickAddBar({
   importOpen: boolean;
   shareOpen: boolean;
   isOwner: boolean;
+  /** Uczeń dodaje własne fiszki — warto o tym napisać wprost. */
+  isStudent: boolean;
   onAdd: (type: CardType) => void;
   onToggleImport: () => void;
   onToggleShare: () => void;
@@ -44,11 +47,15 @@ export function QuickAddBar({
 
       {isOwner && (
         <button className="btn ghost small-btn" aria-expanded={shareOpen} onClick={onToggleShare}>
-          🔗 Link dla nauczyciela
+          👥 Dostęp i uczniowie
         </button>
       )}
 
-      <span className="hint">Zmiany zapisują się automatycznie i pojawiają się u drugiej osoby po kilku sekundach.</span>
+      <span className="hint">
+        {isStudent
+          ? "Dodajesz własne fiszki — nauczyciel je widzi, a Ty nie ruszasz cudzych."
+          : "Zmiany zapisują się automatycznie i pojawiają się u pozostałych po kilku sekundach."}
+      </span>
     </section>
   );
 }

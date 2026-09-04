@@ -1,19 +1,53 @@
-# J-Learner · English Lessons v1.3.0 — GitHub Pages edition
+# J-Learner · English Lessons v1.4.0 — GitHub Pages edition
 
 Statyczna miniaplikacja do wspólnego tworzenia fiszek podczas lekcji angielskiego.
-Frontend jest publikowany na **GitHub Pages**, dane są trzymane w **Supabase**, a tajny link nauczyciela obsługuje **Supabase Edge Function**. Eksport lekcji na Google Drive pozostaje zgodny z importerem AnkiFiszki v128.
+Frontend jest publikowany na **GitHub Pages**, dane są trzymane w **Supabase**, a dostęp (konta, kody dołączenia, tajny link) obsługuje **Supabase Edge Function**. Eksport lekcji na Google Drive pozostaje zgodny z importerem AnkiFiszki v128.
+
+## Role i tryby dostępu
+
+| Kto | Jak wchodzi | Co może |
+| --- | --- | --- |
+| Nauczyciel (właściciel) | konto + hasło | tworzy lekcje i gotowe zestawy, rozdaje kod, widzi wszystkie fiszki, publikuje zestawy w bibliotece |
+| Uczeń | własne konto + kod lekcji | widzi słówka nauczyciela, dodaje **własne** fiszki, kopiuje zestawy z biblioteki, eksportuje na swój Drive |
+| Nauczyciel bez konta | tajny link (jak w v1.3.0) | edytuje treść lekcji, nie zarządza dostępem |
+
+Uczeń edytuje i usuwa wyłącznie fiszki, których jest autorem — pilnuje tego
+Edge Function, a interfejs korzysta z tych samych funkcji z `lib/domain.ts`,
+żeby nie pokazywać pól, których zapis i tak zostałby odrzucony.
+
+### Kod dołączenia
+
+Nauczyciel otwiera lekcję → **Dostęp i uczniowie** → kod w formacie `ABCD-EFGH`
+(albo gotowy link `/join/?code=…`). Uczeń wpisuje kod na swojej liście lekcji.
+Kod można wyłączyć albo wygenerować od nowa; zapisani uczniowie zostają.
+
+### Gotowe zestawy i biblioteka
+
+Przycisk **+ Nowy zestaw słówek** tworzy lekcję typu `set`. Po włączeniu
+**Opublikuj zestaw** widać go w zakładce **Biblioteka**. Uczeń robi tam własną
+kopię — z prawem do edycji i eksportu — a oryginał nauczyciela zostaje nietknięty.
+
+### Widoczność fiszek
+
+Przełącznik **Uczniowie widzą nawzajem swoje fiszki** decyduje, czy lekcja jest
+wspólnym brudnopisem, czy każdy pracuje na swoim. Nauczyciel widzi wszystko
+niezależnie od ustawienia.
 
 ## Architektura
 
 ```text
 GitHub Pages (Next.js static export)
           │
-          ├── właściciel: Supabase Auth + RLS
+          ├── konta (nauczyciel / uczeń): Supabase Auth + RLS + english_profiles
+          │
+          ├── lista lekcji, dołączanie kodem, biblioteka ──> PostgREST + RPC
+          │        english_join_lesson() / english_copy_lesson()
           │
           ├── edytor lekcji ──> Supabase Edge Function
-          │                       └── weryfikacja JWT lub tajnego linku
+          │                       └── JWT właściciela | JWT ucznia z zapisem
+          │                           w english_lesson_members | tajny link
           │
-          └── Google Drive OAuth (drive.file)
+          └── Google Drive OAuth (drive.file) — osobny plik dla każdego konta
                     │
                     └── J-Learner/EnglishLessons/*.json
                                    │
@@ -33,10 +67,12 @@ GitHub Pages (Next.js static export)
 ## Struktura kodu
 
 ```text
-app/            trasy Next.js (logowanie, lista lekcji, edytor)
-components/     Field + components/lesson/* (nagłówek, fiszka, import, link, pasek narzędzi)
-lib/            domena, typy, klient API, autosave (use-lesson.ts), Google Drive
-supabase/       migracja SQL + Edge Function (_shared/domain.ts to kopia lib/domain.ts)
+app/            trasy Next.js (logowanie, lista lekcji, edytor, biblioteka, /join)
+components/     Field, components/dashboard/* (lista lekcji, kod dołączenia),
+                components/lesson/* (nagłówek, fiszka, import, dostęp, pasek narzędzi)
+lib/            domena i reguły dostępu, typy, klient API, konta (account.ts),
+                autosave (use-lesson.ts), Google Drive
+supabase/       migracje SQL + Edge Function (_shared/domain.ts to kopia lib/domain.ts)
 tests/          testy jednostkowe na node:test
 ```
 
@@ -51,18 +87,38 @@ npm test          # same testy (node:test, bez dodatkowych zależności)
 ```
 
 Test `tests/domain-sync.test.ts` porównuje `lib/domain.ts` z kopią dla Deno w
-`supabase/functions/_shared/domain.ts`. Dodanie nowego typu fiszki po jednej
+`supabase/functions/_shared/domain.ts` — zarówno listy wartości, jak i treść
+funkcji uprawnień. Dodanie typu fiszki albo poluzowanie reguły dostępu po jednej
 stronie bez drugiej wywali build, zanim rozjazd trafi na produkcję.
+`tests/permissions.test.ts` sprawdza same reguły: co widzi uczeń, czego nie
+ruszy i co się zmienia po zakończeniu lekcji.
 
 ## 1. Supabase — baza danych
 
-Jeżeli nie zrobiłeś tego przy poprzedniej wersji, uruchom w **Supabase → SQL Editor**:
+Uruchom w **Supabase → SQL Editor**, w tej kolejności:
 
 ```text
-supabase/migrations/20260824_english_lessons.sql
+supabase/migrations/20260824_english_lessons.sql          # jeśli jeszcze nie było
+supabase/migrations/20260904_english_lessons_accounts.sql # nowość v1.4.0
 ```
 
-Migracja tworzy `english_lessons`, `english_lesson_cards`, RLS i triggery `updated_at`.
+Pierwsza migracja tworzy `english_lessons`, `english_lesson_cards`, RLS i triggery `updated_at`.
+
+Druga dokłada:
+
+- `english_profiles` — rola konta (`teacher` / `student`) i imię widoczne przy fiszkach,
+- `english_lesson_members` — zapisy uczniów na lekcje i ich stan eksportu na Drive,
+- `english_lesson_cards.author_id` — autor fiszki,
+- kod dołączenia, publikację zestawów, widoczność między uczniami i licznik fiszek,
+- funkcje `english_join_lesson(kod)` oraz `english_copy_lesson(id)`.
+
+Migracja jest idempotentna. **Konta założone przed v1.4.0 dostają rolę
+nauczyciela** — rolę zmienisz w aplikacji (lista lekcji, selektor obok nazwy konta)
+albo ręcznie:
+
+```sql
+update public.english_profiles set role = 'student' where user_id = '...';
+```
 
 ## 2. GitHub — utwórz repo
 
@@ -119,7 +175,7 @@ Po pushu do `main` workflow `Deploy Supabase Edge Function` wdroży:
 english-lesson-api
 ```
 
-Funkcja ma `verify_jwt = false`, ponieważ nauczyciel może wejść bez konta. Sama funkcja **nie ufa anonimowemu wywołaniu**: przed odczytem/zapisem wymaga prawidłowego JWT właściciela albo 64-znakowego tajnego tokenu konkretnej lekcji.
+Funkcja ma `verify_jwt = false`, ponieważ nauczyciel może wejść bez konta. Sama funkcja **nie ufa anonimowemu wywołaniu**: przed odczytem/zapisem wymaga JWT właściciela, JWT ucznia zapisanego na lekcję albo 64-znakowego tajnego tokenu konkretnej lekcji.
 
 ## 5. Supabase Auth — adres strony
 
@@ -207,16 +263,32 @@ J-Learner/EnglishLessons/
 
 Ponowny import tej samej lekcji aktualizuje treść bez resetowania postępu SM-2.
 
-## Link dla nauczyciela
+## Dostęp i uczniowie
 
-W edytorze (tylko właściciel) przycisk **🔗 Link dla nauczyciela** pozwala:
+W edytorze (tylko właściciel) przycisk **👥 Dostęp i uczniowie** pozwala:
+
+- pokazać i skopiować kod dołączenia albo link `/join/?code=…`,
+- wyłączyć dołączanie i wygenerować nowy kod,
+- zdecydować, czy uczniowie widzą nawzajem swoje fiszki,
+- opublikować gotowy zestaw w bibliotece,
+- zobaczyć listę uczniów z liczbą dodanych fiszek i usunąć kogoś z lekcji
+  (jego dotychczasowe fiszki zostają w lekcji, widoczne dla nauczyciela).
+
+W sekcji **Tajny link** dalej można:
 
 - skopiować link,
 - wyłączyć udostępnianie (`share_enabled`) — istniejący link przestaje otwierać lekcję,
 - wygenerować nowy token, jeśli stary link wyciekł. Stary przestaje działać natychmiast.
 
 Link zawiera 64-znakowy sekret i daje prawo edycji tej jednej lekcji bez logowania —
-traktuj go jak hasło.
+traktuj go jak hasło. Fiszki dodane tajnym linkiem nie mają autora i są traktowane
+jak słówka od nauczyciela.
+
+## Eksport na Drive przy wielu kontach
+
+Stan eksportu jest per konto: nauczyciel ma swój plik na swoim Drive, każdy uczeń
+własny na swoim. Uczeń eksportuje to, co widzi — słówka nauczyciela plus swoje
+fiszki — więc w AnkiFiszki trafia dokładnie jego zestaw.
 
 ## Ważne bezpieczeństwo
 

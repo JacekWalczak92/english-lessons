@@ -1,15 +1,37 @@
-import type { CardType, LessonStatus, ReviewDirection } from "./domain.ts";
+import type {
+  AccessMode,
+  AppRole,
+  CardType,
+  LessonKind,
+  LessonStatus,
+  ReviewDirection,
+} from "./domain.ts";
 
-export type { CardType, LessonStatus, ReviewDirection };
+export type { AccessMode, AppRole, CardType, LessonKind, LessonStatus, ReviewDirection };
 export {
+  ACCESS_MODES,
+  APP_ROLES,
   CARD_TYPES,
-  REVIEW_DIRECTIONS,
-  LESSON_STATUSES,
   FIELD_LIMITS,
+  JOIN_CODE_ALPHABET,
+  JOIN_CODE_LENGTH,
+  LESSON_KINDS,
+  LESSON_STATUSES,
+  REVIEW_DIRECTIONS,
+  canAddCards,
+  canEditCard,
+  canEditLessonMeta,
+  canManageAccess,
   defaultDirection,
   directionForTypeChange,
+  formatJoinCode,
+  isAppRole,
   isCardType,
+  isCardVisible,
+  isLessonCard,
+  normalizeJoinCode,
 } from "./domain.ts";
+export type { CardAccessContext } from "./domain.ts";
 
 export type Lesson = {
   id: string;
@@ -18,8 +40,19 @@ export type Lesson = {
   title: string;
   teacher_name: string | null;
   status: LessonStatus;
+  lesson_kind: LessonKind;
+  description: string;
   share_enabled: boolean;
   share_token?: string;
+  /** Kod dołączenia widzi tylko właściciel — uczeń dostaje go od nauczyciela. */
+  join_code?: string;
+  join_enabled: boolean;
+  /** Zestaw opublikowany w bibliotece jest widoczny dla wszystkich uczniów. */
+  is_published: boolean;
+  /** Czy uczniowie widzą nawzajem swoje fiszki. */
+  peer_visibility: boolean;
+  card_count: number;
+  source_lesson_id: string | null;
   drive_file_id: string | null;
   drive_file_name: string | null;
   last_exported_at: string | null;
@@ -27,9 +60,34 @@ export type Lesson = {
   updated_at: string;
 };
 
+export type AppProfile = {
+  user_id: string;
+  role: AppRole;
+  display_name: string;
+};
+
+export type LessonMember = {
+  lesson_id: string;
+  user_id: string;
+  member_role: AppRole;
+  display_name: string;
+  joined_at: string;
+  /** Liczba fiszek dodanych przez tego ucznia — dla panelu nauczyciela. */
+  card_count: number;
+};
+
+/** Stan eksportu na Drive jest per konto: nauczyciel i każdy uczeń mają własny plik. */
+export type DriveState = {
+  drive_file_id: string | null;
+  drive_file_name: string | null;
+  last_exported_at: string | null;
+};
+
 export type LessonCard = {
   id: string;
   lesson_id: string;
+  /** `null` = fiszka lekcyjna dodana tajnym linkiem nauczyciela. */
+  author_id: string | null;
   card_type: CardType;
   english: string;
   polish: string;
@@ -45,12 +103,27 @@ export type LessonCard = {
   updated_at: string;
 };
 
-export type LessonAccess = "owner" | "shared";
+export type LessonAccess = AccessMode;
+
+export type LessonViewer = {
+  user_id: string | null;
+  display_name: string;
+  access: LessonAccess;
+};
 
 export type LessonPayload = {
   lesson: Lesson;
   cards: LessonCard[];
   access: LessonAccess;
+  /** Id właściciela lekcji — po nim rozpoznajemy fiszki „od nauczyciela”. */
+  teacher_id: string;
+  viewer: LessonViewer;
+  /** Mapa `user_id -> nazwa`, żeby pokazać autora fiszki bez pytania o profile. */
+  authors: Record<string, string>;
+  /** Lista uczniów — wypełniana tylko dla właściciela lekcji. */
+  members: LessonMember[];
+  /** Stan eksportu na Drive dla oglądającego (właściciela albo ucznia). */
+  drive: DriveState;
 };
 
 /** Odpowiedź szybkiej ścieżki pollingu, gdy nic się nie zmieniło. */
@@ -62,8 +135,10 @@ export function isUnchanged(result: LessonPollResult): result is LessonUnchanged
   return (result as LessonUnchanged).unchanged === true;
 }
 
-/** Pola fiszki, które klient może modyfikować. */
-export type CardPatch = Partial<Omit<LessonCard, "id" | "lesson_id" | "created_at" | "updated_at">>;
+/** Pola fiszki, które klient może modyfikować. Autor jest ustalany po stronie serwera. */
+export type CardPatch = Partial<
+  Omit<LessonCard, "id" | "lesson_id" | "author_id" | "created_at" | "updated_at">
+>;
 
 /** Pola lekcji, które klient może modyfikować. */
 export type LessonPatch = Partial<
@@ -73,15 +148,22 @@ export type LessonPatch = Partial<
     | "title"
     | "teacher_name"
     | "status"
+    | "description"
     | "share_enabled"
-    | "drive_file_id"
-    | "drive_file_name"
-    | "last_exported_at"
+    | "join_enabled"
+    | "is_published"
+    | "peer_visibility"
   >
-> & { rotate_share_token?: true };
+> & { rotate_share_token?: true; rotate_join_code?: true };
 
 export type NewCardInput = Pick<LessonCard, "card_type" | "review_direction" | "order_index"> &
   Partial<Omit<CardPatch, "card_type" | "review_direction" | "order_index">>;
+
+/** Nazwa lekcji-zestawu w bibliotece razem z licznikiem fiszek. */
+export type LibraryEntry = Pick<
+  Lesson,
+  "id" | "title" | "description" | "teacher_name" | "card_count" | "lesson_date" | "updated_at"
+>;
 
 export type LessonExportV1 = {
   schemaVersion: 1;
@@ -154,7 +236,7 @@ export function lessonFileName(lesson: Pick<Lesson, "id" | "lesson_date">) {
  * w lekcji i fiszkach. Pozwala serwerowi odpowiedzieć `{ unchanged: true }`
  * zamiast przesyłać kilkaset fiszek co kilka sekund.
  */
-export function lessonSyncStamp(payload: LessonPayload): string {
+export function lessonSyncStamp(payload: Pick<LessonPayload, "lesson" | "cards">): string {
   return payload.cards.reduce(
     (newest, card) => (card.updated_at > newest ? card.updated_at : newest),
     payload.lesson.updated_at,

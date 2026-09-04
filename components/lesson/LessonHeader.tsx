@@ -14,6 +14,7 @@ const SYNC_LABELS: Record<SyncState, string> = {
 export function LessonHeader({
   lesson,
   locked,
+  lockNote,
   syncState,
   pendingCount,
   onChange,
@@ -21,6 +22,8 @@ export function LessonHeader({
 }: {
   lesson: Lesson;
   locked: boolean;
+  /** Dlaczego pola są zablokowane — inny powód dla ucznia, inny po zakończeniu lekcji. */
+  lockNote?: string;
   syncState: SyncState;
   pendingCount: number;
   onChange: (patch: LessonPatch) => void;
@@ -82,11 +85,7 @@ export function LessonHeader({
             Ponów zapis
           </button>
         )}
-        {locked && (
-          <span className="warning small">
-            Lekcja zakończona — link nauczyciela jest tylko do odczytu.
-          </span>
-        )}
+        {locked && lockNote && <span className="warning small">{lockNote}</span>}
       </div>
     </section>
   );

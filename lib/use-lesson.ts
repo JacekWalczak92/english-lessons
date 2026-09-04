@@ -6,6 +6,7 @@ import {
   isUnchanged,
   lessonSyncStamp,
   type CardPatch,
+  type DriveState,
   type LessonCard,
   type LessonPatch,
   type LessonPayload,
@@ -39,6 +40,10 @@ export type LessonActions = {
   createCard: (card: NewCardInput) => Promise<LessonCard | null>;
   createCards: (cards: NewCardInput[]) => Promise<LessonCard[]>;
   deleteCard: (cardId: string) => Promise<void>;
+  /** Zapisuje stan eksportu na Drive dla bieżącego konta (nauczyciela albo ucznia). */
+  saveDrive: (state: DriveState) => Promise<void>;
+  /** Usuwa ucznia z lekcji. Tylko właściciel. */
+  removeMember: (userId: string) => Promise<void>;
   moveCard: (cardId: string, direction: -1 | 1) => Promise<void>;
   /** Wypycha wszystkie oczekujące zmiany i zwraca świeży stan z serwera. */
   flushAndReload: () => Promise<LessonPayload | null>;
@@ -244,7 +249,8 @@ export function useLesson(scope: LessonScope): LessonState & { actions: LessonAc
 
   const updateLesson = useCallback(
     (patch: LessonPatch, immediate = false) => {
-      const { rotate_share_token: _rotate, ...optimistic } = patch;
+      // Flagi rotacji nie są polami lekcji — nowy token przychodzi z serwera.
+      const { rotate_share_token: _rotateShare, rotate_join_code: _rotateJoin, ...optimistic } = patch;
       patchLocal((current) => ({ ...current, lesson: { ...current.lesson, ...optimistic } }));
       lessonPatch.current = { ...lessonPatch.current, ...patch };
       refreshPendingCount();
@@ -471,6 +477,25 @@ export function useLesson(scope: LessonScope): LessonState & { actions: LessonAc
     [patchLocal, updateCard],
   );
 
+  const saveDrive = useCallback(
+    async (state: DriveState) => {
+      await lessonApi.saveDrive(scopeRef.current, state);
+      patchLocal((current) => ({ ...current, drive: state }));
+    },
+    [patchLocal],
+  );
+
+  const removeMember = useCallback(
+    async (userId: string) => {
+      await lessonApi.removeMember(scopeRef.current, userId);
+      patchLocal((current) => ({
+        ...current,
+        members: current.members.filter((member) => member.user_id !== userId),
+      }));
+    },
+    [patchLocal],
+  );
+
   const flushAndReload = useCallback(async () => {
     await flushAll();
     const result = await lessonApi.get(scopeRef.current);
@@ -495,6 +520,8 @@ export function useLesson(scope: LessonScope): LessonState & { actions: LessonAc
       createCard,
       createCards,
       deleteCard,
+      saveDrive,
+      removeMember,
       moveCard,
       flushAndReload,
       retryNow,
@@ -506,7 +533,9 @@ export function useLesson(scope: LessonScope): LessonState & { actions: LessonAc
       deleteCard,
       flushAndReload,
       moveCard,
+      removeMember,
       retryNow,
+      saveDrive,
       updateCard,
       updateLesson,
     ],

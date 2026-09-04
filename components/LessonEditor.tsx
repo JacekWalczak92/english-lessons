@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
+import { AccessPanel } from "@/components/lesson/AccessPanel";
 import { CardEditor } from "@/components/lesson/CardEditor";
 import { ImportPanel } from "@/components/lesson/ImportPanel";
 import { LessonHeader } from "@/components/lesson/LessonHeader";
 import { LessonToolbar } from "@/components/lesson/LessonToolbar";
 import { QuickAddBar } from "@/components/lesson/QuickAddBar";
-import { SharePanel } from "@/components/lesson/SharePanel";
 import { downloadTextFile } from "@/lib/clipboard";
 import { DRIVE_FOLDER_PATH, exportLessonToDrive } from "@/lib/google-drive";
 import { readPublicConfig } from "@/lib/supabase-browser";
@@ -15,8 +15,14 @@ import { useCardShortcuts } from "@/lib/use-card-shortcuts";
 import { useLesson } from "@/lib/use-lesson";
 import {
   buildLessonExport,
+  canAddCards,
+  canEditCard,
+  canEditLessonMeta,
+  canManageAccess,
   defaultDirection,
+  isLessonCard,
   lessonFileName,
+  type CardAccessContext,
   type CardType,
   type Lesson,
   type NewCardInput,
@@ -28,8 +34,9 @@ type Banner = { kind: "success" | "warning"; text: string } | null;
  * Orkiestracja edytora lekcji.
  *
  * Stan i synchronizacja siedzą w `useLesson`, pojedyncze fragmenty interfejsu
- * w `components/lesson/*`. Ten plik tylko je spina — w v1.2.0 wszystko to
- * mieszkało w jednym komponencie na 552 linie.
+ * w `components/lesson/*`. Ten plik tylko je spina i wylicza uprawnienia —
+ * te same funkcje z `lib/domain.ts` egzekwuje Edge Function, więc interfejs
+ * nie pokazuje pól, których zapis i tak zostałby odrzucony.
  */
 export function LessonEditor({ lessonId, lessonKey }: { lessonId: string; lessonKey?: string }) {
   const scope = useMemo(() => ({ lessonId, lessonKey }), [lessonId, lessonKey]);
@@ -37,18 +44,33 @@ export function LessonEditor({ lessonId, lessonKey }: { lessonId: string; lesson
     useLesson(scope);
 
   const [importOpen, setImportOpen] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
+  const [accessOpen, setAccessOpen] = useState(false);
   const [driveBusy, setDriveBusy] = useState(false);
   const [banner, setBanner] = useState<Banner>(null);
 
   const lesson = data?.lesson ?? null;
-  const isOwner = data?.access === "owner";
-  const locked = !!lesson && !isOwner && lesson.status === "finished";
+  const access = data?.access ?? "shared";
+  const isOwner = access === "owner";
+  const isStudent = access === "member";
   const googleClientId = readPublicConfig()?.googleClientId ?? null;
+
+  const context: CardAccessContext | null = useMemo(() => {
+    if (!data || !lesson) return null;
+    return {
+      mode: data.access,
+      viewerId: data.viewer.user_id,
+      lessonOwnerId: data.teacher_id,
+      lessonStatus: lesson.status,
+      peerVisibility: lesson.peer_visibility,
+    };
+  }, [data, lesson]);
+
+  const canAdd = context ? canAddCards(context) : false;
+  const metaLocked = !canEditLessonMeta(access) || (!isOwner && lesson?.status === "finished");
 
   const addCard = useCallback(
     async (type: CardType) => {
-      if (locked) return;
+      if (!canAdd) return;
       const card: NewCardInput = {
         card_type: type,
         review_direction: defaultDirection(type),
@@ -62,10 +84,10 @@ export function LessonEditor({ lessonId, lessonKey }: { lessonId: string; lesson
           ?.scrollIntoView({ behavior: "smooth", block: "center" });
       }, 80);
     },
-    [actions, locked],
+    [actions, canAdd],
   );
 
-  useCardShortcuts(!!data && !locked, (type) => void addCard(type));
+  useCardShortcuts(!!data && canAdd, (type) => void addCard(type));
 
   const removeCard = useCallback(
     (cardId: string) => {
@@ -108,16 +130,14 @@ export function LessonEditor({ lessonId, lessonKey }: { lessonId: string; lesson
         clientId: googleClientId,
         fileName,
         payload,
-        existingFileId: fresh.lesson.drive_file_id,
+        existingFileId: fresh.drive.drive_file_id,
       });
-      actions.updateLesson(
-        {
-          drive_file_id: result.id,
-          drive_file_name: result.name,
-          last_exported_at: payload.lesson.exportedAt,
-        },
-        true,
-      );
+      // Stan eksportu jest per konto: uczeń zapisuje własny plik na własnym Drive.
+      await actions.saveDrive({
+        drive_file_id: result.id,
+        drive_file_name: result.name,
+        last_exported_at: payload.lesson.exportedAt,
+      });
       setBanner({ kind: "success", text: `Zapisano na Drive: ${DRIVE_FOLDER_PATH}/${result.name}` });
     } catch (error) {
       setBanner({
@@ -137,7 +157,7 @@ export function LessonEditor({ lessonId, lessonKey }: { lessonId: string; lesson
     );
   }
 
-  if (!data || !lesson) {
+  if (!data || !lesson || !context) {
     return (
       <main className="center-shell">
         <div className="panel auth-panel">
@@ -153,6 +173,22 @@ export function LessonEditor({ lessonId, lessonKey }: { lessonId: string; lesson
 
   const nextOrder = data.cards.reduce((max, card) => Math.max(max, card.order_index), -1) + 1;
 
+  const accessLabel =
+    access === "owner" ? "tryb nauczyciela" : access === "member" ? "tryb ucznia" : "tajny link";
+
+  function authorLabel(authorId: string | null) {
+    if (!data) return "";
+    if (authorId && authorId === data.viewer.user_id) return "";
+    if (isLessonCard(authorId, data.teacher_id)) return "od nauczyciela";
+    return data.authors[authorId ?? ""] || "inny uczeń";
+  }
+
+  const lockNote = isStudent
+    ? lesson.status === "finished"
+      ? "Lekcja zakończona — fiszek nie da się już zmieniać."
+      : "Ustawienia lekcji prowadzi nauczyciel."
+    : "Lekcja zakończona — link nauczyciela jest tylko do odczytu.";
+
   return (
     <main className="shell">
       <div className="topbar">
@@ -162,11 +198,13 @@ export function LessonEditor({ lessonId, lessonKey }: { lessonId: string; lesson
             <span className={`badge ${lesson.status === "finished" ? "finished" : ""}`}>
               {lesson.status === "finished" ? "zakończona" : "w toku"}
             </span>
-            <span>{isOwner ? "tryb właściciela" : "link nauczyciela"}</span>
+            {lesson.lesson_kind === "set" && <span className="badge muted-badge">zestaw</span>}
+            <span>{accessLabel}</span>
             <span>• {data.cards.length} fiszek</span>
+            {isOwner && data.members.length > 0 && <span>• {data.members.length} uczniów</span>}
           </div>
         </div>
-        {isOwner && (
+        {access !== "shared" && (
           <Link href="/dashboard" className="btn ghost small-btn">
             ← Lekcje
           </Link>
@@ -175,7 +213,8 @@ export function LessonEditor({ lessonId, lessonKey }: { lessonId: string; lesson
 
       <LessonHeader
         lesson={lesson}
-        locked={locked}
+        locked={metaLocked}
+        lockNote={lockNote}
         syncState={syncState}
         pendingCount={pendingCount}
         onChange={actions.updateLesson}
@@ -183,24 +222,31 @@ export function LessonEditor({ lessonId, lessonKey }: { lessonId: string; lesson
       />
 
       <QuickAddBar
-        locked={locked}
+        locked={!canAdd}
         importOpen={importOpen}
-        shareOpen={shareOpen}
-        isOwner={isOwner}
+        shareOpen={accessOpen}
+        isOwner={canManageAccess(access)}
+        isStudent={isStudent}
         onAdd={(type) => void addCard(type)}
         onToggleImport={() => setImportOpen((value) => !value)}
-        onToggleShare={() => setShareOpen((value) => !value)}
+        onToggleShare={() => setAccessOpen((value) => !value)}
       />
 
-      {shareOpen && isOwner && (
-        <SharePanel lesson={lesson} onChange={actions.updateLesson} onClose={() => setShareOpen(false)} />
+      {accessOpen && canManageAccess(access) && (
+        <AccessPanel
+          lesson={lesson}
+          members={data.members}
+          onChange={actions.updateLesson}
+          onRemoveMember={(userId) => void actions.removeMember(userId)}
+          onClose={() => setAccessOpen(false)}
+        />
       )}
 
       {importOpen && (
         <ImportPanel
           existingCards={data.cards}
           nextOrder={nextOrder}
-          locked={locked}
+          locked={!canAdd}
           onImport={runImport}
           onClose={() => setImportOpen(false)}
         />
@@ -226,7 +272,8 @@ export function LessonEditor({ lessonId, lessonKey }: { lessonId: string; lesson
               card={card}
               index={index}
               total={data.cards.length}
-              locked={locked}
+              locked={!canEditCard(context, card.author_id)}
+              authorLabel={authorLabel(card.author_id)}
               onChange={actions.updateCard}
               onDelete={removeCard}
               onMove={moveCard}
@@ -238,8 +285,10 @@ export function LessonEditor({ lessonId, lessonKey }: { lessonId: string; lesson
       <LessonToolbar
         lesson={lesson}
         isOwner={isOwner}
+        canFinish={canEditLessonMeta(access)}
         driveBusy={driveBusy}
         driveConfigured={!!googleClientId}
+        driveState={data.drive}
         onDownload={downloadJson}
         onExport={() => void exportDrive()}
         onStatusChange={(status: Lesson["status"]) => actions.updateLesson({ status }, true)}

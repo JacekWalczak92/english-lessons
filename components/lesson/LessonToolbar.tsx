@@ -1,20 +1,26 @@
 "use client";
 
-import type { Lesson } from "@/lib/types";
+import type { DriveState, Lesson } from "@/lib/types";
 
 export function LessonToolbar({
   lesson,
   isOwner,
+  canFinish,
   driveBusy,
   driveConfigured,
+  driveState,
   onDownload,
   onExport,
   onStatusChange,
 }: {
   lesson: Lesson;
   isOwner: boolean;
+  /** Zakończyć lekcję może właściciel i nauczyciel z tajnego linku, nie uczeń. */
+  canFinish: boolean;
   driveBusy: boolean;
   driveConfigured: boolean;
+  /** Stan eksportu bieżącego konta — uczeń ma własny plik na swoim Drive. */
+  driveState: DriveState;
   onDownload: () => void;
   onExport: () => void;
   onStatusChange: (status: Lesson["status"]) => void;
@@ -25,8 +31,7 @@ export function LessonToolbar({
         <button className="btn ghost" onClick={onDownload}>
           Pobierz JSON
         </button>
-        {isOwner && (
-          <button
+        <button
             className="btn secondary"
             disabled={driveBusy || !driveConfigured}
             title={
@@ -36,28 +41,27 @@ export function LessonToolbar({
             }
             onClick={onExport}
           >
-            {driveBusy ? "Eksportuję…" : "Eksportuj na Google Drive"}
+            {driveBusy ? "Eksportuję…" : "Eksportuj na mój Google Drive"}
           </button>
-        )}
-        {lesson.last_exported_at && (
+        {driveState.last_exported_at && (
           <span className="small muted">
-            Ostatni eksport: {new Date(lesson.last_exported_at).toLocaleString("pl-PL")}
+            Ostatni eksport: {new Date(driveState.last_exported_at).toLocaleString("pl-PL")}
           </span>
         )}
       </div>
 
       <div className="toolbar-right">
-        {lesson.status === "draft" ? (
-          <button className="btn success" onClick={() => onStatusChange("finished")}>
-            Zakończ lekcję
-          </button>
-        ) : (
-          isOwner && (
-            <button className="btn secondary" onClick={() => onStatusChange("draft")}>
-              Otwórz ponownie
-            </button>
-          )
-        )}
+        {lesson.status === "draft"
+          ? canFinish && (
+              <button className="btn success" onClick={() => onStatusChange("finished")}>
+                Zakończ lekcję
+              </button>
+            )
+          : isOwner && (
+              <button className="btn secondary" onClick={() => onStatusChange("draft")}>
+                Otwórz ponownie
+              </button>
+            )}
       </div>
     </section>
   );

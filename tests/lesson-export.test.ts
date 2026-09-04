@@ -15,7 +15,14 @@ const lesson: Lesson = {
   title: "  Lekcja próbna  ",
   teacher_name: "  Mark  ",
   status: "draft",
+  lesson_kind: "lesson",
+  description: "",
   share_enabled: true,
+  join_enabled: true,
+  is_published: false,
+  peer_visibility: true,
+  card_count: 0,
+  source_lesson_id: null,
   drive_file_id: null,
   drive_file_name: null,
   last_exported_at: null,
@@ -27,6 +34,7 @@ function card(overrides: Partial<LessonCard>): LessonCard {
   return {
     id: "card-1",
     lesson_id: lesson.id,
+    author_id: null,
     card_type: "word_phrase",
     english: "bill",
     polish: "rachunek",
@@ -101,7 +109,6 @@ describe("lessonSyncStamp", () => {
   it("zwraca najnowszy updated_at z lekcji i fiszek", () => {
     const stamp = lessonSyncStamp({
       lesson,
-      access: "owner",
       cards: [
         card({ updated_at: "2026-05-12T08:00:00+00:00" }),
         card({ id: "c2", updated_at: "2026-05-12T11:30:00+00:00" }),
@@ -111,7 +118,7 @@ describe("lessonSyncStamp", () => {
   });
 
   it("radzi sobie z lekcją bez fiszek", () => {
-    assert.equal(lessonSyncStamp({ lesson, access: "owner", cards: [] }), lesson.updated_at);
+    assert.equal(lessonSyncStamp({ lesson, cards: [] }), lesson.updated_at);
   });
 });
 

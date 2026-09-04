@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Field } from "@/components/Field";
 import { MISSING_CONFIG_MESSAGE, getSupabaseBrowser, readPublicConfig } from "@/lib/supabase-browser";
 import { absoluteSiteUrl } from "@/lib/site-path";
+import { FIELD_LIMITS, type AppRole } from "@/lib/types";
 
 type Feedback = { kind: "success" | "error"; text: string } | null;
 
@@ -13,6 +14,8 @@ export default function HomePage() {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [role, setRole] = useState<AppRole>("student");
   const [busy, setBusy] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [feedback, setFeedback] = useState<Feedback>(null);
@@ -54,7 +57,12 @@ export default function HomePage() {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: absoluteSiteUrl("/") },
+          // Rola trafia do user_metadata, a trigger w bazie przepisuje ją do
+          // english_profiles — aplikacja czyta tylko tę drugą wartość.
+          options: {
+            emailRedirectTo: absoluteSiteUrl("/"),
+            data: { app_role: role, display_name: displayName.trim() },
+          },
         });
         if (error) throw error;
         if (data.session) router.push("/dashboard");
@@ -79,7 +87,10 @@ export default function HomePage() {
       <section className="panel auth-panel">
         <div className="brand">J-Learner</div>
         <h1>English Lessons</h1>
-        <p className="muted">Wspólny, szybki edytor fiszek używany podczas lekcji.</p>
+        <p className="muted">
+          Wspólny edytor fiszek na lekcje angielskiego. Nauczyciel prowadzi lekcje i zestawy
+          słówek, uczeń dołącza kodem i robi własne fiszki.
+        </p>
 
         {checkingSession ? (
           <p className="muted" style={{ marginTop: 24 }}>
@@ -102,6 +113,51 @@ export default function HomePage() {
                   />
                 )}
               </Field>
+              {mode === "signup" && (
+                <>
+                  <Field label="Imię widoczne dla innych" hint="Tak podpisane będą Twoje fiszki.">
+                    {(props) => (
+                      <input
+                        {...props}
+                        className="input"
+                        value={displayName}
+                        maxLength={FIELD_LIMITS.display_name}
+                        placeholder="np. Kasia"
+                        disabled={!configured}
+                        onChange={(event) => setDisplayName(event.target.value)}
+                        required
+                      />
+                    )}
+                  </Field>
+                  <div className="field">
+                    <span className="role-label">Zakładam konto jako</span>
+                    <div className="role-choice" role="group" aria-label="Rola konta">
+                      <button
+                        type="button"
+                        className={role === "student" ? "active" : ""}
+                        aria-pressed={role === "student"}
+                        onClick={() => setRole("student")}
+                      >
+                        Uczeń
+                      </button>
+                      <button
+                        type="button"
+                        className={role === "teacher" ? "active" : ""}
+                        aria-pressed={role === "teacher"}
+                        onClick={() => setRole("teacher")}
+                      >
+                        Nauczyciel
+                      </button>
+                    </div>
+                    <span className="small muted">
+                      {role === "student"
+                        ? "Dołączasz do lekcji kodem i robisz własne fiszki."
+                        : "Tworzysz lekcje, kody dla uczniów i gotowe zestawy słówek."}
+                    </span>
+                  </div>
+                </>
+              )}
+
               <Field label="Hasło" hint={mode === "signup" ? "Minimum 6 znaków." : undefined}>
                 {(props) => (
                   <input
