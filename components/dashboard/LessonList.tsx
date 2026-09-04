@@ -61,6 +61,14 @@ export function LessonList({
                 </div>
               </div>
               <div className="btn-row">
+                {lesson.card_count > 0 && (
+                  <Link
+                    className="btn small-btn"
+                    href={`/study/?id=${encodeURIComponent(lesson.id)}`}
+                  >
+                    Ucz się
+                  </Link>
+                )}
                 <Link
                   className="btn secondary small-btn"
                   href={`/lesson/?id=${encodeURIComponent(lesson.id)}`}

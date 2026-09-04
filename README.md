@@ -1,7 +1,28 @@
-# J-Learner · English Lessons v1.4.0 — GitHub Pages edition
+# J-Learner · English Lessons v1.5.0 — GitHub Pages edition
 
 Statyczna miniaplikacja do wspólnego tworzenia fiszek podczas lekcji angielskiego.
 Frontend jest publikowany na **GitHub Pages**, dane są trzymane w **Supabase**, a dostęp (konta, kody dołączenia, tajny link) obsługuje **Supabase Edge Function**. Eksport lekcji na Google Drive pozostaje zgodny z importerem AnkiFiszki v128.
+
+## Nauka słówek w przeglądarce
+
+Przycisk **🎓 Ucz się** (lista lekcji i edytor) otwiera `/study/?id=…` — powtórkę
+słówek z tej jednej lekcji, bez wychodzenia z aplikacji.
+
+- **Kierunek:** jak na fiszce, PL → EN, EN → PL albo mieszany. Fiszki typu
+  „wymowa” zawsze pytają o wymowę i pokazują zapis fonetyczny.
+- **Zakres:** wszystkie słówka, tylko od nauczyciela, tylko moje, albo
+  „do poprawki” (to, co ostatnio poszło źle).
+- **Sesja:** „Umiem” zdejmuje fiszkę, „Powtórz” odkłada ją o kilka pozycji dalej —
+  sesja kończy się dopiero, gdy każde słówko zostało raz zaliczone. Na końcu jest
+  podsumowanie z listą wpadek i przyciskiem „Tylko trudne”.
+- **Klawiatura:** spacja odsłania odpowiedź i zalicza, `1` = powtórz, `2` = umiem.
+- **Wymowa:** przycisk 🔊 czyta angielską stronę fiszki (Web Speech API, jeśli
+  przeglądarka je ma).
+
+Postęp nauki siedzi w `localStorage` tej przeglądarki, nie w bazie. Pełny SRS
+z algorytmem SM-2 zostaje po stronie AnkiFiszki na Androidzie — web ma być szybką
+powtórką przed lekcją i po niej, a nie drugim, konkurencyjnym systemem powtórek.
+Logika sesji siedzi w `lib/study.ts` i jest pokryta testami w `tests/study.test.ts`.
 
 ## Role i tryby dostępu
 
@@ -67,11 +88,12 @@ GitHub Pages (Next.js static export)
 ## Struktura kodu
 
 ```text
-app/            trasy Next.js (logowanie, lista lekcji, edytor, biblioteka, /join)
+app/            trasy Next.js (logowanie, lista lekcji, edytor, nauka, biblioteka, /join)
 components/     Field, components/dashboard/* (lista lekcji, kod dołączenia),
-                components/lesson/* (nagłówek, fiszka, import, dostęp, pasek narzędzi)
+                components/lesson/* (nagłówek, fiszka, import, dostęp, pasek narzędzi),
+                components/study/* (sesja powtórki)
 lib/            domena i reguły dostępu, typy, klient API, konta (account.ts),
-                autosave (use-lesson.ts), Google Drive
+                autosave (use-lesson.ts), nauka (study.ts, study-progress.ts), Google Drive
 supabase/       migracje SQL + Edge Function (_shared/domain.ts to kopia lib/domain.ts)
 tests/          testy jednostkowe na node:test
 ```

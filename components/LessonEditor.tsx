@@ -204,11 +204,23 @@ export function LessonEditor({ lessonId, lessonKey }: { lessonId: string; lesson
             {isOwner && data.members.length > 0 && <span>• {data.members.length} uczniów</span>}
           </div>
         </div>
-        {access !== "shared" && (
-          <Link href="/dashboard" className="btn ghost small-btn">
-            ← Lekcje
-          </Link>
-        )}
+        <div className="btn-row">
+          {data.cards.length > 0 && (
+            <Link
+              href={`/study/?id=${encodeURIComponent(lesson.id)}${
+                lessonKey ? `&key=${encodeURIComponent(lessonKey)}` : ""
+              }`}
+              className="btn small-btn"
+            >
+              🎓 Ucz się
+            </Link>
+          )}
+          {access !== "shared" && (
+            <Link href="/dashboard" className="btn ghost small-btn">
+              ← Lekcje
+            </Link>
+          )}
+        </div>
       </div>
 
       <LessonHeader
