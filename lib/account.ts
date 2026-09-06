@@ -51,13 +51,18 @@ export async function loadProfile(): Promise<AppProfile | null> {
   };
 }
 
-export async function updateProfile(patch: { role?: AppRole; display_name?: string }) {
+/**
+ * Zmienić da się tylko imię. Rola jest przypisana do konta na stałe przy
+ * rejestracji — pilnuje tego również wyzwalacz w bazie, więc nawet ręcznie
+ * spreparowane żądanie jej nie podmieni.
+ */
+export async function updateDisplayName(displayName: string) {
   const supabase = getSupabaseBrowser();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) throw new Error("Sesja wygasła — zaloguj się ponownie.");
   const { error } = await supabase
     .from("english_profiles")
-    .update(patch)
+    .update({ display_name: displayName.trim().slice(0, 80) })
     .eq("user_id", userData.user.id);
   if (error) throw error;
 }

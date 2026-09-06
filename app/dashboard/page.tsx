@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { JoinLessonBox } from "@/components/dashboard/JoinLessonBox";
 import { LessonList } from "@/components/dashboard/LessonList";
+import { TourOverlay } from "@/components/onboarding/TourOverlay";
 import {
   createLesson,
   deleteLesson,
@@ -12,10 +13,11 @@ import {
   listJoinedLessons,
   listOwnedLessons,
   loadProfile,
-  updateProfile,
 } from "@/lib/account";
+import { dashboardTour } from "@/lib/onboarding";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
-import type { AppProfile, AppRole, Lesson } from "@/lib/types";
+import { useTour } from "@/lib/use-tour";
+import type { AppProfile, Lesson } from "@/lib/types";
 
 /** Data w strefie użytkownika — `new Date().toISOString()` potrafi cofnąć o dobę. */
 function localDate(now = new Date()) {
@@ -107,24 +109,18 @@ export default function DashboardPage() {
     }
   }
 
-  async function switchRole(role: AppRole) {
-    if (!profile || profile.role === role) return;
-    const previous = profile;
-    setProfile({ ...profile, role });
-    try {
-      await updateProfile({ role });
-    } catch (e) {
-      setProfile(previous);
-      setError(e instanceof Error ? e.message : "Nie udało się zmienić roli.");
-    }
-  }
-
   async function signOut() {
     await getSupabaseBrowser().auth.signOut();
     router.replace("/");
   }
 
   const isTeacher = profile?.role === "teacher";
+  const tour = useTour(
+    profile ? dashboardTour(profile.role) : null,
+    profile?.user_id ?? null,
+    !busy && !!profile,
+  );
+
   const lessons = owned.filter((lesson) => lesson.lesson_kind === "lesson");
   const sets = owned.filter((lesson) => lesson.lesson_kind === "set");
 
@@ -139,31 +135,32 @@ export default function DashboardPage() {
           {profile && (
             <div className="lesson-meta" style={{ marginTop: 6 }}>
               <span>{profile.display_name || "konto bez nazwy"}</span>
-              <label className="role-switch">
-                <span className="sr-only">Rola konta</span>
-                <select
-                  className="select small-select"
-                  value={profile.role}
-                  onChange={(event) => void switchRole(event.target.value as AppRole)}
-                >
-                  <option value="teacher">nauczyciel</option>
-                  <option value="student">uczeń</option>
-                </select>
-              </label>
+              <span className="badge">
+                {profile.role === "teacher" ? "konto nauczyciela" : "konto ucznia"}
+              </span>
             </div>
           )}
         </div>
         <div className="topbar-actions">
-          <Link className="btn ghost" href="/library">
+          <button className="btn ghost" onClick={tour.start}>
+            ❔ Instrukcja
+          </button>
+          <Link className="btn ghost" href="/library" data-tour="library">
             Biblioteka
           </Link>
           {isTeacher && (
             <>
-              <button className="btn" onClick={() => void addLesson("lesson")} disabled={creating}>
+              <button
+                className="btn"
+                data-tour="new-lesson"
+                onClick={() => void addLesson("lesson")}
+                disabled={creating}
+              >
                 {creating ? "Tworzę…" : "+ Nowa lekcja"}
               </button>
               <button
                 className="btn secondary"
+                data-tour="new-set"
                 onClick={() => void addLesson("set")}
                 disabled={creating}
               >
@@ -202,14 +199,6 @@ export default function DashboardPage() {
             lessons={sets}
             onDelete={(lesson) => void removeLesson(lesson)}
           />
-          {joined.length > 0 && (
-            <LessonList
-              title="Lekcje, do których dołączyłeś"
-              emptyText=""
-              lessons={joined}
-              onLeave={(lesson) => void leave(lesson)}
-            />
-          )}
         </>
       ) : (
         <>
@@ -236,6 +225,8 @@ export default function DashboardPage() {
           />
         </>
       )}
+
+      {tour.active && <TourOverlay steps={tour.steps} onFinish={tour.finish} />}
     </main>
   );
 }

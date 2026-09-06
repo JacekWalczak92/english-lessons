@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { TourOverlay } from "@/components/onboarding/TourOverlay";
 import { lessonApi } from "@/lib/lesson-api";
+import { useTour } from "@/lib/use-tour";
 import { speakEnglish, speechSupported } from "@/lib/speech";
 import {
   applyAnswer,
@@ -71,6 +73,8 @@ export function StudySession({ lessonId, lessonKey }: { lessonId: string; lesson
       active = false;
     };
   }, [lessonId, lessonKey]);
+
+  const tour = useTour("study", data?.viewer.user_id ?? null, phase === "setup");
 
   const scopeContext = useMemo(
     () => ({
@@ -209,12 +213,17 @@ export function StudySession({ lessonId, lessonKey }: { lessonId: string; lesson
               {counts.skipped > 0 && <span>• {counts.skipped} pominięto (niepełna fiszka)</span>}
             </div>
           </div>
-          {backLink}
+          <div className="btn-row">
+            <button className="btn ghost small-btn" onClick={tour.start}>
+              ❔ Instrukcja
+            </button>
+            {backLink}
+          </div>
         </div>
 
         <section className="panel study-setup">
           <h2>Kierunek pytania</h2>
-          <div className="chip-row">
+          <div className="chip-row" data-tour="study-direction">
             {DIRECTION_LABELS.map((entry) => (
               <button
                 key={entry.value}
@@ -229,7 +238,7 @@ export function StudySession({ lessonId, lessonKey }: { lessonId: string; lesson
           </div>
 
           <h2 style={{ marginTop: 18 }}>Co powtarzamy</h2>
-          <div className="study-scopes">
+          <div className="study-scopes" data-tour="study-scope">
             {scopeButtons.map((entry) => (
               <button
                 key={entry.value}
@@ -265,6 +274,8 @@ export function StudySession({ lessonId, lessonKey }: { lessonId: string; lesson
             </p>
           )}
         </section>
+
+        {tour.active && <TourOverlay steps={tour.steps} onFinish={tour.finish} />}
       </main>
     );
   }

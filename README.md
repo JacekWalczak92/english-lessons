@@ -1,7 +1,24 @@
-# J-Learner · English Lessons v1.5.0 — GitHub Pages edition
+# J-Learner · English Lessons v1.6.0 — GitHub Pages edition
 
 Statyczna miniaplikacja do wspólnego tworzenia fiszek podczas lekcji angielskiego.
 Frontend jest publikowany na **GitHub Pages**, dane są trzymane w **Supabase**, a dostęp (konta, kody dołączenia, tajny link) obsługuje **Supabase Edge Function**. Eksport lekcji na Google Drive pozostaje zgodny z importerem AnkiFiszki v128.
+
+## Instruktaż przy pierwszym użyciu
+
+Przy pierwszym wejściu na listę lekcji, do edytora i do nauki uruchamia się
+krótki instruktaż: przyciemniony ekran, podświetlony element i dymek z opisem.
+Kroki są inne dla nauczyciela i dla ucznia.
+
+- Sterowanie: **Dalej / Wstecz / Pomiń**, strzałki i `Esc`.
+- „Widziane” zapisuje się w `localStorage` osobno dla każdego ekranu i konta,
+  więc drugi użytkownik na tym samym komputerze zobaczy instruktaż od nowa.
+- Wrócić do niego można w każdej chwili przyciskiem **❔ Instrukcja** w pasku górnym.
+- Kroki wskazujące na element, którego akurat nie ma (np. „Ucz się” w pustej
+  lekcji), są pomijane — instruktaż nie podświetla pustego miejsca.
+
+Treść kroków siedzi w `lib/onboarding.ts` jako zwykłe dane, więc dopisanie kroku
+nie wymaga ruszania komponentu. Sam dymek i podświetlenie są w
+`components/onboarding/TourOverlay.tsx`.
 
 ## Nauka słówek w przeglądarce
 
@@ -26,11 +43,25 @@ Logika sesji siedzi w `lib/study.ts` i jest pokryta testami w `tests/study.test.
 
 ## Role i tryby dostępu
 
+**Konto ma jeden tryb na stałe.** Rolę wybiera się przy rejestracji i nie da się
+jej przełączyć w aplikacji; kto potrzebuje obu, zakłada drugie konto. Pilnują tego
+trzy rzeczy naraz: interfejs (brak przełącznika), wyzwalacz `english_lock_profile_role`
+(odrzuca zmianę roli przychodzącą od zalogowanego użytkownika) oraz
+`english_guard_lesson_kind` (zestawy i publikacja tylko z konta nauczyciela).
+Administrator poprawi rolę z SQL Editora — tam `auth.uid()` jest puste:
+
+```sql
+update public.english_profiles set role = 'student' where user_id = '...';
+```
+
 | Kto | Jak wchodzi | Co może |
 | --- | --- | --- |
-| Nauczyciel (właściciel) | konto + hasło | tworzy lekcje i gotowe zestawy, rozdaje kod, widzi wszystkie fiszki, publikuje zestawy w bibliotece |
-| Uczeń | własne konto + kod lekcji | widzi słówka nauczyciela, dodaje **własne** fiszki, kopiuje zestawy z biblioteki, eksportuje na swój Drive |
+| Nauczyciel (właściciel) | konto nauczyciela | tworzy lekcje i gotowe zestawy, rozdaje kod, widzi wszystkie fiszki, publikuje zestawy w bibliotece |
+| Uczeń | konto ucznia + kod lekcji | widzi słówka nauczyciela, dodaje **własne** fiszki, kopiuje zestawy z biblioteki, eksportuje na swój Drive |
 | Nauczyciel bez konta | tajny link (jak w v1.3.0) | edytuje treść lekcji, nie zarządza dostępem |
+
+Konto nauczyciela nie dołącza kodem do cudzej lekcji, a konto ucznia nie tworzy
+zestawów do biblioteki — obie granice są egzekwowane w bazie, nie tylko w UI.
 
 Uczeń edytuje i usuwa wyłącznie fiszki, których jest autorem — pilnuje tego
 Edge Function, a interfejs korzysta z tych samych funkcji z `lib/domain.ts`,
@@ -91,9 +122,11 @@ GitHub Pages (Next.js static export)
 app/            trasy Next.js (logowanie, lista lekcji, edytor, nauka, biblioteka, /join)
 components/     Field, components/dashboard/* (lista lekcji, kod dołączenia),
                 components/lesson/* (nagłówek, fiszka, import, dostęp, pasek narzędzi),
-                components/study/* (sesja powtórki)
+                components/study/* (sesja powtórki),
+                components/onboarding/* (instruktaż z podświetleniem)
 lib/            domena i reguły dostępu, typy, klient API, konta (account.ts),
-                autosave (use-lesson.ts), nauka (study.ts, study-progress.ts), Google Drive
+                autosave (use-lesson.ts), nauka (study.ts, study-progress.ts),
+                instruktaż (onboarding.ts, use-tour.ts), Google Drive
 supabase/       migracje SQL + Edge Function (_shared/domain.ts to kopia lib/domain.ts)
 tests/          testy jednostkowe na node:test
 ```
@@ -121,7 +154,8 @@ Uruchom w **Supabase → SQL Editor**, w tej kolejności:
 
 ```text
 supabase/migrations/20260824_english_lessons.sql          # jeśli jeszcze nie było
-supabase/migrations/20260904_english_lessons_accounts.sql # nowość v1.4.0
+supabase/migrations/20260904_english_lessons_accounts.sql # konta, kody, biblioteka
+supabase/migrations/20260905_english_role_lock.sql        # nowość v1.6.0
 ```
 
 Pierwsza migracja tworzy `english_lessons`, `english_lesson_cards`, RLS i triggery `updated_at`.
@@ -134,7 +168,9 @@ Druga dokłada:
 - kod dołączenia, publikację zestawów, widoczność między uczniami i licznik fiszek,
 - funkcje `english_join_lesson(kod)` oraz `english_copy_lesson(id)`.
 
-Migracja jest idempotentna. **Konta założone przed v1.4.0 dostają rolę
+Trzecia przypina rolę do konta na stałe i pilnuje, co wolno w danym trybie.
+
+Migracje są idempotentne. **Konta założone przed v1.4.0 dostają rolę
 nauczyciela** — rolę zmienisz w aplikacji (lista lekcji, selektor obok nazwy konta)
 albo ręcznie:
 

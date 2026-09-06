@@ -26,7 +26,7 @@ export function LessonToolbar({
   onStatusChange: (status: Lesson["status"]) => void;
 }) {
   return (
-    <section className="panel toolbar">
+    <section className="panel toolbar" data-tour="toolbar">
       <div className="toolbar-left">
         <button className="btn ghost" onClick={onDownload}>
           Pobierz JSON

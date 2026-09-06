@@ -41,8 +41,12 @@ export function LessonList({
         ) : null
       ) : (
         <div className="dashboard-grid">
-          {lessons.map((lesson) => (
-            <article className="panel lesson-row" key={lesson.id}>
+          {lessons.map((lesson, index) => (
+            <article
+              className="panel lesson-row"
+              key={lesson.id}
+              data-tour={index === 0 ? "lesson-row" : undefined}
+            >
               <div>
                 <div className="lesson-title">{lesson.title}</div>
                 <div className="lesson-meta">
@@ -64,6 +68,7 @@ export function LessonList({
                 {lesson.card_count > 0 && (
                   <Link
                     className="btn small-btn"
+                    data-tour={index === 0 ? "study-button" : undefined}
                     href={`/study/?id=${encodeURIComponent(lesson.id)}`}
                   >
                     Ucz się

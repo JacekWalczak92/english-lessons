@@ -8,6 +8,9 @@ import { ImportPanel } from "@/components/lesson/ImportPanel";
 import { LessonHeader } from "@/components/lesson/LessonHeader";
 import { LessonToolbar } from "@/components/lesson/LessonToolbar";
 import { QuickAddBar } from "@/components/lesson/QuickAddBar";
+import { TourOverlay } from "@/components/onboarding/TourOverlay";
+import { lessonTour } from "@/lib/onboarding";
+import { useTour } from "@/lib/use-tour";
 import { downloadTextFile } from "@/lib/clipboard";
 import { DRIVE_FOLDER_PATH, exportLessonToDrive } from "@/lib/google-drive";
 import { readPublicConfig } from "@/lib/supabase-browser";
@@ -64,6 +67,12 @@ export function LessonEditor({ lessonId, lessonKey }: { lessonId: string; lesson
       peerVisibility: lesson.peer_visibility,
     };
   }, [data, lesson]);
+
+  const tour = useTour(
+    data ? lessonTour(data.access) : null,
+    data?.viewer.user_id ?? null,
+    !!data && !loading,
+  );
 
   const canAdd = context ? canAddCards(context) : false;
   const metaLocked = !canEditLessonMeta(access) || (!isOwner && lesson?.status === "finished");
@@ -205,12 +214,16 @@ export function LessonEditor({ lessonId, lessonKey }: { lessonId: string; lesson
           </div>
         </div>
         <div className="btn-row">
+          <button className="btn ghost small-btn" onClick={tour.start}>
+            ❔ Instrukcja
+          </button>
           {data.cards.length > 0 && (
             <Link
               href={`/study/?id=${encodeURIComponent(lesson.id)}${
                 lessonKey ? `&key=${encodeURIComponent(lessonKey)}` : ""
               }`}
               className="btn small-btn"
+              data-tour="study-link"
             >
               🎓 Ucz się
             </Link>
@@ -305,6 +318,8 @@ export function LessonEditor({ lessonId, lessonKey }: { lessonId: string; lesson
         onExport={() => void exportDrive()}
         onStatusChange={(status: Lesson["status"]) => actions.updateLesson({ status }, true)}
       />
+
+      {tour.active && <TourOverlay steps={tour.steps} onFinish={tour.finish} />}
     </main>
   );
 }

@@ -152,7 +152,8 @@ export default function HomePage() {
                     <span className="small muted">
                       {role === "student"
                         ? "Dołączasz do lekcji kodem i robisz własne fiszki."
-                        : "Tworzysz lekcje, kody dla uczniów i gotowe zestawy słówek."}
+                        : "Tworzysz lekcje, kody dla uczniów i gotowe zestawy słówek."}{" "}
+                      Konto ma jeden tryb na stałe — do drugiej roli zakłada się osobne konto.
                     </span>
                   </div>
                 </>

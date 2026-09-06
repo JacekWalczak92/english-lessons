@@ -36,7 +36,7 @@ export function JoinLessonBox({ onJoined }: { onJoined: () => void }) {
   }
 
   return (
-    <section className="panel join-box">
+    <section className="panel join-box" data-tour="join-code">
       <form onSubmit={submit} className="join-form">
         <div className="field">
           <label htmlFor="join-code">Kod lekcji od nauczyciela</label>

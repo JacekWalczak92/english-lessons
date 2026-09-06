@@ -1,8 +1,9 @@
-# Uruchomienie — 7 kroków (v1.5.0)
+# Uruchomienie — 7 kroków (v1.6.0)
 
 1. Uruchom w Supabase SQL Editor, w tej kolejności:
    - `supabase/migrations/20260824_english_lessons.sql` (jeśli jeszcze nie było),
-   - `supabase/migrations/20260904_english_lessons_accounts.sql` (**nowe w v1.4.0** — konta uczniów, kody dołączenia, biblioteka).
+   - `supabase/migrations/20260904_english_lessons_accounts.sql` (konta uczniów, kody dołączenia, biblioteka),
+   - `supabase/migrations/20260905_english_role_lock.sql` (**nowe w v1.6.0** — jeden tryb na konto).
 2. Utwórz repo GitHub, np. `english-lessons`, i wrzuć do niego zawartość tego folderu.
 3. GitHub → Settings → Pages → Source: **GitHub Actions**.
 4. GitHub → Actions Variables: dodaj `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID`.
@@ -12,8 +13,10 @@
 
 Format JSON jest ten sam, więc AnkiFiszki v128 pozostaje kompatybilne bez zmian.
 
-Aktualizacja z v1.4.0: **nie ma nowej migracji SQL** — tryb nauki działa na
-danych, które już są. Podmieniasz pliki, robisz push.
+Aktualizacja z v1.5.0: uruchom `20260905_english_role_lock.sql` i zrób push.
+Instruktaż pokaże się użytkownikom sam, przy pierwszym wejściu na każdy ekran.
+
+Aktualizacja z v1.4.0: dodatkowo tryb nauki — bez własnej migracji.
 
 Aktualizacja z v1.3.0: **jest nowa migracja SQL** (punkt 1). Konta założone
 wcześniej dostają rolę nauczyciela — rolę zmienisz w prawym górnym rogu listy

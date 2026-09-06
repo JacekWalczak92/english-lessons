@@ -24,7 +24,7 @@ export function QuickAddBar({
   onToggleShare: () => void;
 }) {
   return (
-    <section className="panel quick-add">
+    <section className="panel quick-add" data-tour="quick-add">
       {QUICK_ADD.map((entry) => (
         <button
           key={entry.type}
@@ -40,13 +40,19 @@ export function QuickAddBar({
         className="btn secondary small-btn"
         disabled={locked}
         aria-expanded={importOpen}
+        data-tour="import"
         onClick={onToggleImport}
       >
         ⇩ Importuj słówka
       </button>
 
       {isOwner && (
-        <button className="btn ghost small-btn" aria-expanded={shareOpen} onClick={onToggleShare}>
+        <button
+          className="btn ghost small-btn"
+          aria-expanded={shareOpen}
+          data-tour="access"
+          onClick={onToggleShare}
+        >
           👥 Dostęp i uczniowie
         </button>
       )}
