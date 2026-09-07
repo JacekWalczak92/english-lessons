@@ -1,13 +1,24 @@
--- J-Learner English Lessons v1.7.0
+-- J-Learner English Lessons v1.7.1
 -- Uczeń przypisuje lekcję nauczycielowi z listy kont w systemie. Znikają kody
 -- dołączenia i tajne linki. Treść fiszek wypełnia nauczyciel, uczeń dopisuje
 -- komentarz. Uruchom w Supabase SQL Editor PO 20260905_english_role_lock.sql.
 -- Migracja jest idempotentna.
 
--- ---------------------------------------------- 1. katalog nauczycieli
+-- ------------------------------- 1. nowe kolumny (przed funkcjami, które ich używają)
 
 alter table public.english_profiles
   add column if not exists accepting_students boolean not null default true;
+
+alter table public.english_lessons
+  add column if not exists assigned_teacher_id uuid references auth.users(id) on delete set null,
+  add column if not exists assigned_at timestamptz,
+  -- Prośba ucznia „o co chodzi w tej lekcji” — nauczyciel widzi ją przed wypełnieniem.
+  add column if not exists student_request text not null default '';
+
+create index if not exists english_lessons_assigned_idx
+  on public.english_lessons(assigned_teacher_id, lesson_date desc);
+
+-- ------------------------------------------- 2. katalog nauczycieli i profile
 
 /**
  * Widoczność profili.
@@ -28,17 +39,6 @@ as $$
        or (l.assigned_teacher_id = p_user and l.owner_id = (select auth.uid()))
   );
 $$;
-
--- ------------------------------------- 2. lekcja przypisana nauczycielowi
-
-alter table public.english_lessons
-  add column if not exists assigned_teacher_id uuid references auth.users(id) on delete set null,
-  add column if not exists assigned_at timestamptz,
-  -- Prośba ucznia „o co chodzi w tej lekcji” — nauczyciel widzi ją przed wypełnieniem.
-  add column if not exists student_request text not null default '';
-
-create index if not exists english_lessons_assigned_idx
-  on public.english_lessons(assigned_teacher_id, lesson_date desc);
 
 /**
  * Przypisać lekcję można wyłącznie kontu nauczyciela, który przyjmuje uczniów.
@@ -141,7 +141,12 @@ begin
   end if;
 
   for v_member in
-    select m.lesson_id, m.user_id, m.display_name, l.title, l.lesson_date, l.teacher_name, l.owner_id
+    select m.lesson_id, m.user_id, m.display_name, l.title, l.lesson_date, l.teacher_name,
+           l.owner_id,
+           -- Lekcję da się przypisać tylko koncie nauczyciela; gdy poprzednim
+           -- właścicielem był uczeń, kopia powstaje bez przypisania.
+           coalesce((select p.role from public.english_profiles p where p.user_id = l.owner_id), '')
+             = 'teacher' as owner_is_teacher
     from public.english_lesson_members m
     join public.english_lessons l on l.id = m.lesson_id
     where l.lesson_kind = 'lesson'
@@ -156,7 +161,9 @@ begin
     )
     values (
       v_member.user_id, v_member.lesson_date, v_member.title, v_member.teacher_name,
-      'draft', 'lesson', v_member.owner_id, v_member.lesson_id, false, false
+      'draft', 'lesson',
+      case when v_member.owner_is_teacher then v_member.owner_id else null end,
+      v_member.lesson_id, false, false
     )
     returning id into v_new_id;
 

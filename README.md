@@ -1,4 +1,4 @@
-# J-Learner · English Lessons v1.7.0 — GitHub Pages edition
+# J-Learner · English Lessons v1.7.1 — GitHub Pages edition
 
 Statyczna miniaplikacja do fiszek z lekcji angielskiego.
 Frontend jest publikowany na **GitHub Pages**, dane są trzymane w **Supabase**, a dostęp obsługuje **Supabase Edge Function**. Eksport lekcji na Google Drive pozostaje zgodny z importerem AnkiFiszki v128.

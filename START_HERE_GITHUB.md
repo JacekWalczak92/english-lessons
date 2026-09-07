@@ -1,10 +1,10 @@
-# Uruchomienie — 7 kroków (v1.7.0)
+# Uruchomienie — 7 kroków (v1.7.1)
 
 1. Uruchom w Supabase SQL Editor, w tej kolejności:
    - `supabase/migrations/20260824_english_lessons.sql` (jeśli jeszcze nie było),
    - `supabase/migrations/20260904_english_lessons_accounts.sql` (konta uczniów, kody dołączenia, biblioteka),
    - `supabase/migrations/20260905_english_role_lock.sql` (jeden tryb na konto),
-   - `supabase/migrations/20260906_english_assignments.sql` (**nowe w v1.7.0** — przypisywanie lekcji nauczycielowi, komentarz ucznia).
+   - `supabase/migrations/20260906_english_assignments.sql` (**nowe w v1.7.0, poprawione w v1.7.1** — przypisywanie lekcji nauczycielowi, komentarz ucznia).
 2. Utwórz repo GitHub, np. `english-lessons`, i wrzuć do niego zawartość tego folderu.
 3. GitHub → Settings → Pages → Source: **GitHub Actions**.
 4. GitHub → Actions Variables: dodaj `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID`.
