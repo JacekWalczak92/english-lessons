@@ -1,7 +1,16 @@
-# J-Learner · English Lessons v1.6.0 — GitHub Pages edition
+# J-Learner · English Lessons v1.7.0 — GitHub Pages edition
 
-Statyczna miniaplikacja do wspólnego tworzenia fiszek podczas lekcji angielskiego.
-Frontend jest publikowany na **GitHub Pages**, dane są trzymane w **Supabase**, a dostęp (konta, kody dołączenia, tajny link) obsługuje **Supabase Edge Function**. Eksport lekcji na Google Drive pozostaje zgodny z importerem AnkiFiszki v128.
+Statyczna miniaplikacja do fiszek z lekcji angielskiego.
+Frontend jest publikowany na **GitHub Pages**, dane są trzymane w **Supabase**, a dostęp obsługuje **Supabase Edge Function**. Eksport lekcji na Google Drive pozostaje zgodny z importerem AnkiFiszki v128.
+
+## Jak to działa od v1.7.0
+
+1. **Uczeń zakłada lekcję** i wybiera nauczyciela z listy kont w systemie. Pisze przy tym, czego potrzebuje.
+2. **Lekcja pojawia się w panelu nauczyciela**, który wypełnia ją słówkami — sam albo importem listy.
+3. **Uczeń dopisuje komentarz** pod każdą fiszką: skojarzenie, kontekst z zajęć, wątpliwość.
+4. Obie strony powtarzają materiał w trybie nauki i eksportują go na **swój** Google Drive.
+
+Nie ma już kodów dołączenia ani tajnych linków — dostęp wynika wyłącznie z konta.
 
 ## Instruktaż przy pierwszym użyciu
 
@@ -54,24 +63,112 @@ Administrator poprawi rolę z SQL Editora — tam `auth.uid()` jest puste:
 update public.english_profiles set role = 'student' where user_id = '...';
 ```
 
-| Kto | Jak wchodzi | Co może |
+| Kto | Co robi w lekcji | Czego nie może |
 | --- | --- | --- |
-| Nauczyciel (właściciel) | konto nauczyciela | tworzy lekcje i gotowe zestawy, rozdaje kod, widzi wszystkie fiszki, publikuje zestawy w bibliotece |
-| Uczeń | konto ucznia + kod lekcji | widzi słówka nauczyciela, dodaje **własne** fiszki, kopiuje zestawy z biblioteki, eksportuje na swój Drive |
-| Nauczyciel bez konta | tajny link (jak w v1.3.0) | edytuje treść lekcji, nie zarządza dostępem |
+| Uczeń (właściciel lekcji) | zakłada lekcję, wybiera nauczyciela, opisuje potrzeby, pisze **komentarz ucznia** pod każdą fiszką, uczy się i eksportuje na swój Drive | nie dodaje, nie edytuje i nie usuwa fiszek |
+| Nauczyciel (przypisany) | wypełnia fiszki, importuje listy słówek, czyta prośbę i komentarze ucznia, kończy lekcję | nie zmienia przypisania ani nie usuwa cudzej lekcji |
+| Nauczyciel (własne lekcje i zestawy) | wszystko powyżej we własnych lekcjach, publikuje zestawy w bibliotece | — |
 
-Konto nauczyciela nie dołącza kodem do cudzej lekcji, a konto ucznia nie tworzy
-zestawów do biblioteki — obie granice są egzekwowane w bazie, nie tylko w UI.
+Podział jest egzekwowany w Edge Function, nie tylko w interfejsie: patch fiszki
+od konta ucznia przechodzi przez osobny schemat walidacji, który dopuszcza
+wyłącznie pole `student_comment`.
+
+Konto nauczyciela nie zamawia lekcji u innego nauczyciela, a konto ucznia nie
+tworzy zestawów do biblioteki — obie granice pilnują wyzwalacze w bazie.
 
 Uczeń edytuje i usuwa wyłącznie fiszki, których jest autorem — pilnuje tego
 Edge Function, a interfejs korzysta z tych samych funkcji z `lib/domain.ts`,
 żeby nie pokazywać pól, których zapis i tak zostałby odrzucony.
 
-### Kod dołączenia
+### Przypisanie nauczyciela
 
-Nauczyciel otwiera lekcję → **Dostęp i uczniowie** → kod w formacie `ABCD-EFGH`
-(albo gotowy link `/join/?code=…`). Uczeń wpisuje kod na swojej liście lekcji.
-Kod można wyłączyć albo wygenerować od nowa; zapisani uczniowie zostają.
+Uczeń wybiera nauczyciela z listy na swoim panelu. Na liście są konta z rolą
+`teacher`, które mają włączone **Przyjmuję nowych uczniów** — nauczyciel może się
+z niej wypisać, a przypisane wcześniej lekcje zostają. Przypisanie sprawdza
+wyzwalacz `english_guard_assignment`: lekcję da się przypisać tylko istniejącemu
+kontu nauczyciela i nie samemu sobie.
+
+### Gotowe zestawy i biblioteka
+
+Przycisk **+ Nowy zestaw słówek** tworzy lekcję typu `set`. Po włączeniu
+**Opublikuj zestaw** widać go w zakładce **Biblioteka**. Uczeń robi tam własną
+kopię — z prawem do edycji i eksportu — a oryginał nauczyciela zostaje nietknięty.
+
+## Instruktaż przy pierwszym użyciu
+
+Przy pierwszym wejściu na listę lekcji, do edytora i do nauki uruchamia się
+krótki instruktaż: przyciemniony ekran, podświetlony element i dymek z opisem.
+Kroki są inne dla nauczyciela i dla ucznia.
+
+- Sterowanie: **Dalej / Wstecz / Pomiń**, strzałki i `Esc`.
+- „Widziane” zapisuje się w `localStorage` osobno dla każdego ekranu i konta,
+  więc drugi użytkownik na tym samym komputerze zobaczy instruktaż od nowa.
+- Wrócić do niego można w każdej chwili przyciskiem **❔ Instrukcja** w pasku górnym.
+- Kroki wskazujące na element, którego akurat nie ma (np. „Ucz się” w pustej
+  lekcji), są pomijane — instruktaż nie podświetla pustego miejsca.
+
+Treść kroków siedzi w `lib/onboarding.ts` jako zwykłe dane, więc dopisanie kroku
+nie wymaga ruszania komponentu. Sam dymek i podświetlenie są w
+`components/onboarding/TourOverlay.tsx`.
+
+## Nauka słówek w przeglądarce
+
+Przycisk **🎓 Ucz się** (lista lekcji i edytor) otwiera `/study/?id=…` — powtórkę
+słówek z tej jednej lekcji, bez wychodzenia z aplikacji.
+
+- **Kierunek:** jak na fiszce, PL → EN, EN → PL albo mieszany. Fiszki typu
+  „wymowa” zawsze pytają o wymowę i pokazują zapis fonetyczny.
+- **Zakres:** wszystkie słówka, tylko od nauczyciela, tylko moje, albo
+  „do poprawki” (to, co ostatnio poszło źle).
+- **Sesja:** „Umiem” zdejmuje fiszkę, „Powtórz” odkłada ją o kilka pozycji dalej —
+  sesja kończy się dopiero, gdy każde słówko zostało raz zaliczone. Na końcu jest
+  podsumowanie z listą wpadek i przyciskiem „Tylko trudne”.
+- **Klawiatura:** spacja odsłania odpowiedź i zalicza, `1` = powtórz, `2` = umiem.
+- **Wymowa:** przycisk 🔊 czyta angielską stronę fiszki (Web Speech API, jeśli
+  przeglądarka je ma).
+
+Postęp nauki siedzi w `localStorage` tej przeglądarki, nie w bazie. Pełny SRS
+z algorytmem SM-2 zostaje po stronie AnkiFiszki na Androidzie — web ma być szybką
+powtórką przed lekcją i po niej, a nie drugim, konkurencyjnym systemem powtórek.
+Logika sesji siedzi w `lib/study.ts` i jest pokryta testami w `tests/study.test.ts`.
+
+## Role i tryby dostępu
+
+**Konto ma jeden tryb na stałe.** Rolę wybiera się przy rejestracji i nie da się
+jej przełączyć w aplikacji; kto potrzebuje obu, zakłada drugie konto. Pilnują tego
+trzy rzeczy naraz: interfejs (brak przełącznika), wyzwalacz `english_lock_profile_role`
+(odrzuca zmianę roli przychodzącą od zalogowanego użytkownika) oraz
+`english_guard_lesson_kind` (zestawy i publikacja tylko z konta nauczyciela).
+Administrator poprawi rolę z SQL Editora — tam `auth.uid()` jest puste:
+
+```sql
+update public.english_profiles set role = 'student' where user_id = '...';
+```
+
+| Kto | Co robi w lekcji | Czego nie może |
+| --- | --- | --- |
+| Uczeń (właściciel lekcji) | zakłada lekcję, wybiera nauczyciela, opisuje potrzeby, pisze **komentarz ucznia** pod każdą fiszką, uczy się i eksportuje na swój Drive | nie dodaje, nie edytuje i nie usuwa fiszek |
+| Nauczyciel (przypisany) | wypełnia fiszki, importuje listy słówek, czyta prośbę i komentarze ucznia, kończy lekcję | nie zmienia przypisania ani nie usuwa cudzej lekcji |
+| Nauczyciel (własne lekcje i zestawy) | wszystko powyżej we własnych lekcjach, publikuje zestawy w bibliotece | — |
+
+Podział jest egzekwowany w Edge Function, nie tylko w interfejsie: patch fiszki
+od konta ucznia przechodzi przez osobny schemat walidacji, który dopuszcza
+wyłącznie pole `student_comment`.
+
+Konto nauczyciela nie zamawia lekcji u innego nauczyciela, a konto ucznia nie
+tworzy zestawów do biblioteki — obie granice pilnują wyzwalacze w bazie.
+
+Uczeń edytuje i usuwa wyłącznie fiszki, których jest autorem — pilnuje tego
+Edge Function, a interfejs korzysta z tych samych funkcji z `lib/domain.ts`,
+żeby nie pokazywać pól, których zapis i tak zostałby odrzucony.
+
+### Przypisanie nauczyciela
+
+Uczeń wybiera nauczyciela z listy na swoim panelu. Na liście są konta z rolą
+`teacher`, które mają włączone **Przyjmuję nowych uczniów** — nauczyciel może się
+z niej wypisać, a przypisane wcześniej lekcje zostają. Przypisanie sprawdza
+wyzwalacz `english_guard_assignment`: lekcję da się przypisać tylko istniejącemu
+kontu nauczyciela i nie samemu sobie.
 
 ### Gotowe zestawy i biblioteka
 
@@ -92,12 +189,12 @@ GitHub Pages (Next.js static export)
           │
           ├── konta (nauczyciel / uczeń): Supabase Auth + RLS + english_profiles
           │
-          ├── lista lekcji, dołączanie kodem, biblioteka ──> PostgREST + RPC
-          │        english_join_lesson() / english_copy_lesson()
+          ├── lista lekcji, katalog nauczycieli, biblioteka ──> PostgREST + RPC
+          │        english_copy_lesson()
           │
           ├── edytor lekcji ──> Supabase Edge Function
-          │                       └── JWT właściciela | JWT ucznia z zapisem
-          │                           w english_lesson_members | tajny link
+          │                       └── JWT właściciela lekcji | JWT przypisanego
+          │                           nauczyciela (nic poza tym)
           │
           └── Google Drive OAuth (drive.file) — osobny plik dla każdego konta
                     │
@@ -110,8 +207,8 @@ GitHub Pages (Next.js static export)
 
 - `next.config.ts` ma `output: "export"`.
 - Nie ma `app/api/*` ani sekretu Supabase w Next.js.
-- Trasa lekcji jest statyczna: `/lesson/?id=<uuid>&key=<token>`.
-- Backend tajnego linku jest w `supabase/functions/english-lesson-api/`.
+- Trasa lekcji jest statyczna: `/lesson/?id=<uuid>`.
+- Backend dostępu do lekcji jest w `supabase/functions/english-lesson-api/`.
 - `.github/workflows/deploy-pages.yml` publikuje frontend.
 - `.github/workflows/deploy-supabase-function.yml` publikuje Edge Function.
 - `NEXT_PUBLIC_BASE_PATH` jest ustawiany automatycznie dla repo typu `username.github.io/nazwa-repo`.
@@ -119,9 +216,9 @@ GitHub Pages (Next.js static export)
 ## Struktura kodu
 
 ```text
-app/            trasy Next.js (logowanie, lista lekcji, edytor, nauka, biblioteka, /join)
-components/     Field, components/dashboard/* (lista lekcji, kod dołączenia),
-                components/lesson/* (nagłówek, fiszka, import, dostęp, pasek narzędzi),
+app/            trasy Next.js (logowanie, lista lekcji, edytor, nauka, biblioteka)
+components/     Field, components/dashboard/* (lista lekcji, wybór nauczyciela),
+                components/lesson/* (nagłówek, fiszka, import, prośba ucznia, pasek narzędzi),
                 components/study/* (sesja powtórki),
                 components/onboarding/* (instruktaż z podświetleniem)
 lib/            domena i reguły dostępu, typy, klient API, konta (account.ts),
@@ -155,7 +252,8 @@ Uruchom w **Supabase → SQL Editor**, w tej kolejności:
 ```text
 supabase/migrations/20260824_english_lessons.sql          # jeśli jeszcze nie było
 supabase/migrations/20260904_english_lessons_accounts.sql # konta, kody, biblioteka
-supabase/migrations/20260905_english_role_lock.sql        # nowość v1.6.0
+supabase/migrations/20260905_english_role_lock.sql        # jeden tryb na konto
+supabase/migrations/20260906_english_assignments.sql     # nowość v1.7.0
 ```
 
 Pierwsza migracja tworzy `english_lessons`, `english_lesson_cards`, RLS i triggery `updated_at`.
@@ -165,10 +263,17 @@ Druga dokłada:
 - `english_profiles` — rola konta (`teacher` / `student`) i imię widoczne przy fiszkach,
 - `english_lesson_members` — zapisy uczniów na lekcje i ich stan eksportu na Drive,
 - `english_lesson_cards.author_id` — autor fiszki,
-- kod dołączenia, publikację zestawów, widoczność między uczniami i licznik fiszek,
-- funkcje `english_join_lesson(kod)` oraz `english_copy_lesson(id)`.
+- publikację zestawów i licznik fiszek,
+- funkcję `english_copy_lesson(id)` (kod dołączenia z tej migracji wycofuje v1.7.0).
 
 Trzecia przypina rolę do konta na stałe i pilnuje, co wolno w danym trybie.
+
+Czwarta wprowadza model z v1.7.0: katalog nauczycieli (`accepting_students`),
+`assigned_teacher_id` i `student_request` w lekcji, `student_comment` w fiszce,
+osobną tabelę `english_lesson_exports` na stan eksportu każdego konta.
+Przenosi też dotychczasowe zapisy kodem — każdy uczeń dostaje własną lekcję
+przypisaną swojemu nauczycielowi razem z kopią fiszek — i wyłącza kody oraz
+tajne linki w danych. Funkcja `english_join_lesson` jest usuwana.
 
 Migracje są idempotentne. **Konta założone przed v1.4.0 dostają rolę
 nauczyciela** — rolę zmienisz w aplikacji (lista lekcji, selektor obok nazwy konta)
@@ -233,7 +338,7 @@ Po pushu do `main` workflow `Deploy Supabase Edge Function` wdroży:
 english-lesson-api
 ```
 
-Funkcja ma `verify_jwt = false`, ponieważ nauczyciel może wejść bez konta. Sama funkcja **nie ufa anonimowemu wywołaniu**: przed odczytem/zapisem wymaga JWT właściciela, JWT ucznia zapisanego na lekcję albo 64-znakowego tajnego tokenu konkretnej lekcji.
+Funkcja ma `verify_jwt = false` (ustawienie z wcześniejszych wersji), ale sama **nie wpuszcza anonimowych wywołań**: bez JWT właściciela lekcji albo przypisanego nauczyciela zwraca 401. Stare linki z `?key=` przestały cokolwiek otwierać.
 
 ## 5. Supabase Auth — adres strony
 
@@ -321,32 +426,12 @@ J-Learner/EnglishLessons/
 
 Ponowny import tej samej lekcji aktualizuje treść bez resetowania postępu SM-2.
 
-## Dostęp i uczniowie
-
-W edytorze (tylko właściciel) przycisk **👥 Dostęp i uczniowie** pozwala:
-
-- pokazać i skopiować kod dołączenia albo link `/join/?code=…`,
-- wyłączyć dołączanie i wygenerować nowy kod,
-- zdecydować, czy uczniowie widzą nawzajem swoje fiszki,
-- opublikować gotowy zestaw w bibliotece,
-- zobaczyć listę uczniów z liczbą dodanych fiszek i usunąć kogoś z lekcji
-  (jego dotychczasowe fiszki zostają w lekcji, widoczne dla nauczyciela).
-
-W sekcji **Tajny link** dalej można:
-
-- skopiować link,
-- wyłączyć udostępnianie (`share_enabled`) — istniejący link przestaje otwierać lekcję,
-- wygenerować nowy token, jeśli stary link wyciekł. Stary przestaje działać natychmiast.
-
-Link zawiera 64-znakowy sekret i daje prawo edycji tej jednej lekcji bez logowania —
-traktuj go jak hasło. Fiszki dodane tajnym linkiem nie mają autora i są traktowane
-jak słówka od nauczyciela.
-
 ## Eksport na Drive przy wielu kontach
 
-Stan eksportu jest per konto: nauczyciel ma swój plik na swoim Drive, każdy uczeń
-własny na swoim. Uczeń eksportuje to, co widzi — słówka nauczyciela plus swoje
-fiszki — więc w AnkiFiszki trafia dokładnie jego zestaw.
+Stan eksportu jest per konto i trzymany w `english_lesson_exports`: nauczyciel ma
+swój plik na swoim Drive, uczeń własny na swoim. Komentarz ucznia jedzie razem
+z fiszką — dopisujemy go do pola `note`, żeby nie zmieniać `schemaVersion: 1`,
+które jest kontraktem z importerem AnkiFiszki.
 
 ## Ważne bezpieczeństwo
 
@@ -360,4 +445,4 @@ ALLOWED_ORIGINS=https://TWOJ_LOGIN.github.io
 ```
 
 Bez tego sekretu funkcja odpowiada z `Access-Control-Allow-Origin: *` (jak dotąd);
-dostępu i tak pilnuje JWT właściciela albo tajny token lekcji.
+dostępu i tak pilnuje JWT właściciela lekcji albo przypisanego nauczyciela.

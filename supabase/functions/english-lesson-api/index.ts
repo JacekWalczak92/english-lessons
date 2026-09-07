@@ -5,21 +5,21 @@ import {
   FIELD_LIMITS,
   LESSON_STATUSES,
   REVIEW_DIRECTIONS,
-  canAddCards,
-  canEditCard,
+  canChangeStatus,
+  canEditCards,
   canEditLessonMeta,
-  canManageAccess,
-  isCardVisible,
+  canEditStudentComment,
+  canManageLesson,
   type AccessMode,
-  type CardAccessContext,
+  type AppRole,
+  type LessonAccessContext,
 } from "../_shared/domain.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Lista dozwolonych originów. Domyślnie `*` (jak w v1.2.0), ale wystarczy
- * ustawić sekret ALLOWED_ORIGINS="https://login.github.io", żeby zawęzić CORS
- * do własnej strony.
+ * Lista dozwolonych originów. Domyślnie `*`, ale wystarczy ustawić sekret
+ * ALLOWED_ORIGINS="https://login.github.io", żeby zawęzić CORS do własnej strony.
  */
 const allowedOrigins = (Deno.env.get("ALLOWED_ORIGINS") ?? "")
   .split(",")
@@ -32,7 +32,7 @@ function corsHeaders(request: Request): Record<string, string> {
     allowedOrigins.length === 0 ? "*" : allowedOrigins.includes(origin) ? origin : "null";
   return {
     "Access-Control-Allow-Origin": allowOrigin,
-    "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-lesson-key",
+    "Access-Control-Allow-Headers": "authorization, apikey, content-type",
     "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
     "Access-Control-Max-Age": "86400",
     "Cache-Control": "no-store",
@@ -54,21 +54,16 @@ const lessonPatchSchema = z
     title: z.string().trim().min(1).max(FIELD_LIMITS.title).optional(),
     teacher_name: z.string().trim().max(FIELD_LIMITS.teacher_name).nullable().optional(),
     description: z.string().trim().max(FIELD_LIMITS.description).optional(),
+    student_request: z.string().trim().max(FIELD_LIMITS.description).optional(),
     status: z.enum(LESSON_STATUSES).optional(),
-    share_enabled: z.boolean().optional(),
-    join_enabled: z.boolean().optional(),
     is_published: z.boolean().optional(),
-    peer_visibility: z.boolean().optional(),
-    /** Unieważnia dotychczasowy tajny link i wystawia nowy. Tylko właściciel. */
-    rotate_share_token: z.literal(true).optional(),
-    /** Unieważnia kod dołączenia — zapisani uczniowie zostają. Tylko właściciel. */
-    rotate_join_code: z.literal(true).optional(),
+    assigned_teacher_id: z.string().regex(UUID_RE).nullable().optional(),
   })
   .strict();
 
 /**
- * Stan eksportu na Drive jest per konto, więc nie jest częścią patcha lekcji:
- * właścicielowi zapisujemy go w wierszu lekcji, uczniowi w jego członkostwie.
+ * Stan eksportu na Drive jest per konto, więc nie jest częścią patcha lekcji —
+ * ląduje w english_lesson_exports pod parą (lekcja, użytkownik).
  */
 const driveStateSchema = z
   .object({
@@ -121,6 +116,7 @@ const cardBatchCreateSchema = z
 
 type CardImportItem = z.infer<typeof cardImportItemSchema>;
 
+/** Patch nauczyciela: cała treść fiszki. */
 const cardPatchSchema = z
   .object({
     card_type: cardTypeSchema.optional(),
@@ -137,41 +133,35 @@ const cardPatchSchema = z
   })
   .strict();
 
+/**
+ * Patch ucznia: wyłącznie komentarz.
+ *
+ * To osobny schemat, a nie filtr pól po parsowaniu — inaczej uczeń wysyłający
+ * `{ english: "…" }` dostałby ciche „zapisano” zamiast odmowy i zobaczyłby
+ * swoją zmianę do pierwszego odświeżenia.
+ */
+const studentCardPatchSchema = z
+  .object({ student_comment: z.string().max(FIELD_LIMITS.student_comment) })
+  .strict();
+
 // ------------------------------------------------------------------- narzędzia
 
 type LessonRow = {
   id: string;
   owner_id: string;
-  share_enabled: boolean;
-  share_token: string;
-  join_code: string;
-  peer_visibility: boolean;
+  assigned_teacher_id: string | null;
   status: "draft" | "finished";
   updated_at: string;
-  drive_file_id: string | null;
-  drive_file_name: string | null;
-  last_exported_at: string | null;
   [key: string]: unknown;
-};
-
-type MemberRow = {
-  lesson_id: string;
-  user_id: string;
-  member_role: "teacher" | "student";
-  display_name: string;
-  drive_file_id: string | null;
-  drive_file_name: string | null;
-  last_exported_at: string | null;
-  joined_at: string;
 };
 
 type Access = {
   admin: SupabaseClient;
   lesson: LessonRow;
   mode: AccessMode;
-  viewerId: string | null;
+  viewerId: string;
   viewerName: string;
-  membership: MemberRow | null;
+  viewerRole: AppRole;
 };
 
 class HttpError extends Error {
@@ -199,26 +189,6 @@ function json(request: Request, data: unknown, status = 200) {
   return Response.json(data, { status, headers: corsHeaders(request) });
 }
 
-function constantTimeEqual(a: string, b: string) {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-
-/** 32 losowe bajty w hexie — ten sam format co domyślna wartość kolumny w SQL. */
-function newShareToken() {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-/** Kod dołączenia losujemy w bazie, żeby unikalność sprawdzał jeden mechanizm. */
-async function newJoinCode(admin: SupabaseClient) {
-  const { data, error } = await admin.rpc("english_new_join_code");
-  if (error) throw error;
-  return data as string;
-}
-
 function adminClient(): SupabaseClient {
   const url = Deno.env.get("SUPABASE_URL");
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -228,10 +198,22 @@ function adminClient(): SupabaseClient {
   });
 }
 
+type ProfileRow = { role: AppRole; display_name: string };
+
+async function loadProfile(admin: SupabaseClient, userId: string): Promise<ProfileRow> {
+  const { data } = await admin
+    .from("english_profiles")
+    .select("role, display_name")
+    .eq("user_id", userId)
+    .maybeSingle();
+  const row = data as ProfileRow | null;
+  return { role: row?.role ?? "student", display_name: row?.display_name ?? "" };
+}
+
 /**
- * Kolejność ma znaczenie: najpierw sprawdzamy konto (właściciel, potem uczeń
- * zapisany na lekcję), a dopiero na końcu tajny link z v1.3.0. Dzięki temu
- * zalogowany nauczyciel, który kliknął własny link, nadal działa jako właściciel.
+ * Dostęp mają dwa konta: właściciel lekcji i przypisany nauczyciel.
+ * Kody dołączenia i tajne linki zniknęły w v1.7.0 — jeżeli ktoś ma jeszcze
+ * stary link, dostanie zwykłe 401.
  */
 async function resolveAccess(request: Request, lessonId: string): Promise<Access> {
   const admin = adminClient();
@@ -247,106 +229,66 @@ async function resolveAccess(request: Request, lessonId: string): Promise<Access
 
   const authorization = request.headers.get("authorization") ?? "";
   const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
-  if (token) {
-    const { data } = await admin.auth.getUser(token);
-    const user = data.user;
-    if (user) {
-      const { data: profile } = await admin
-        .from("english_profiles")
-        .select("display_name")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      const profileName = (profile?.display_name as string | undefined) ?? "";
-      const fallbackName = user.email ?? "";
+  if (!token) throw new HttpError(401, "Zaloguj się, żeby otworzyć lekcję");
 
-      if (user.id === row.owner_id) {
-        return {
-          admin,
-          lesson: row,
-          mode: "owner",
-          viewerId: user.id,
-          viewerName: profileName || fallbackName,
-          membership: null,
-        };
-      }
+  const { data: userData } = await admin.auth.getUser(token);
+  const user = userData.user;
+  if (!user) throw new HttpError(401, "Sesja wygasła — zaloguj się ponownie");
 
-      const { data: membership } = await admin
-        .from("english_lesson_members")
-        .select("*")
-        .eq("lesson_id", lessonId)
-        .eq("user_id", user.id)
-        .maybeSingle();
+  const mode: AccessMode | null =
+    user.id === row.owner_id ? "owner" : user.id === row.assigned_teacher_id ? "assigned" : null;
+  if (!mode) throw new HttpError(403, "Ta lekcja nie należy do Ciebie");
 
-      if (membership) {
-        const member = membership as MemberRow;
-        return {
-          admin,
-          lesson: row,
-          mode: "member",
-          viewerId: user.id,
-          viewerName: member.display_name || profileName || fallbackName,
-          membership: member,
-        };
-      }
-    }
-  }
-
-  const shareKey = request.headers.get("x-lesson-key") ?? "";
-  if (
-    row.share_enabled &&
-    shareKey &&
-    row.share_token &&
-    constantTimeEqual(shareKey, row.share_token)
-  ) {
-    return {
-      admin,
-      lesson: row,
-      mode: "shared",
-      viewerId: null,
-      viewerName: "",
-      membership: null,
-    };
-  }
-
-  throw new HttpError(401, "Brak dostępu do tej lekcji");
-}
-
-function accessContext(access: Access): CardAccessContext {
+  const profile = await loadProfile(admin, user.id);
   return {
-    mode: access.mode,
-    viewerId: access.viewerId,
-    lessonOwnerId: access.lesson.owner_id,
-    lessonStatus: access.lesson.status,
-    peerVisibility: access.lesson.peer_visibility !== false,
+    admin,
+    lesson: row,
+    mode,
+    viewerId: user.id,
+    viewerName: profile.display_name || (user.email ?? ""),
+    viewerRole: profile.role,
   };
 }
 
-/** Autor nowej fiszki: uczeń podpisuje swoją, tajny link tworzy fiszkę lekcyjną. */
-function authorForNewCard(access: Access): string | null {
-  if (access.mode === "shared") return null;
-  return access.viewerId;
+function accessContext(access: Access): LessonAccessContext {
+  return {
+    mode: access.mode,
+    viewerRole: access.viewerRole,
+    lessonStatus: access.lesson.status,
+  };
 }
 
-function assertCanAddCards(access: Access) {
-  if (!canAddCards(accessContext(access))) {
-    throw new HttpError(423, "Lekcja jest zakończona. Właściciel może ją ponownie otworzyć.");
-  }
+/** Druga strona lekcji: uczeń widzi nauczyciela, nauczyciel — ucznia. */
+async function loadCounterpart(access: Access) {
+  const { admin, lesson, mode } = access;
+  const otherId = mode === "owner" ? lesson.assigned_teacher_id : lesson.owner_id;
+  if (!otherId) return null;
+  const profile = await loadProfile(admin, otherId);
+  return {
+    user_id: otherId,
+    display_name: profile.display_name || (profile.role === "teacher" ? "Nauczyciel" : "Uczeń"),
+    role: profile.role,
+  };
+}
+
+async function loadDriveState(access: Access, lessonId: string) {
+  const { data } = await access.admin
+    .from("english_lesson_exports")
+    .select("drive_file_id, drive_file_name, last_exported_at")
+    .eq("lesson_id", lessonId)
+    .eq("user_id", access.viewerId)
+    .maybeSingle();
+  return {
+    drive_file_id: (data?.drive_file_id as string | null) ?? null,
+    drive_file_name: (data?.drive_file_name as string | null) ?? null,
+    last_exported_at: (data?.last_exported_at as string | null) ?? null,
+  };
 }
 
 function publicLesson(lesson: LessonRow, mode: AccessMode) {
   if (mode === "owner") return lesson;
-  const { owner_id: _ownerId, share_token: _shareToken, join_code: _joinCode, ...safe } = lesson;
-  // Stan eksportu właściciela nie jest stanem ucznia — uczeń dostaje swój w `drive`.
-  return { ...safe, drive_file_id: null, drive_file_name: null, last_exported_at: null };
-}
-
-function driveStateFor(access: Access) {
-  const source = access.mode === "member" ? access.membership : access.lesson;
-  return {
-    drive_file_id: source?.drive_file_id ?? null,
-    drive_file_name: source?.drive_file_name ?? null,
-    last_exported_at: source?.last_exported_at ?? null,
-  };
+  const { share_token: _shareToken, join_code: _joinCode, ...safe } = lesson;
+  return safe;
 }
 
 async function parseBody(request: Request) {
@@ -363,19 +305,13 @@ function notNewer(value: string | null | undefined, since: number) {
   return Number.isFinite(time) && time <= since;
 }
 
-type CardStamp = { author_id: string | null; updated_at: string };
-
 /**
  * Szybka ścieżka pollingu.
  *
- * Klient podaje najnowszy znany `updated_at` i liczbę widocznych dla siebie
- * fiszek. Pobieramy tylko trzy kolumny (a nie całe fiszki), liczymy to samo po
- * stronie serwera i przy braku zmian odsyłamy `{ unchanged: true }`. Przy lekcji
- * z 300 fiszkami i odpytywaniu co kilka sekund to różnica między kilkuset
- * kilobajtami a kilkudziesięcioma bajtami na cykl.
- *
- * Filtrowanie widoczności musi być tu identyczne jak w GET — inaczej uczeń,
- * któremu przybyła niewidoczna fiszka kolegi, dostawałby w kółko pełny payload.
+ * Klient podaje najnowszy znany `updated_at` i liczbę fiszek. Pobieramy tylko
+ * dwie kolumny zamiast całych fiszek i przy braku zmian odsyłamy
+ * `{ unchanged: true }` — przy lekcji z 300 fiszkami to różnica między
+ * kilkuset kilobajtami a kilkudziesięcioma bajtami na cykl.
  */
 async function isUnchangedSince(
   admin: SupabaseClient,
@@ -390,46 +326,13 @@ async function isUnchangedSince(
 
   const { data, error } = await admin
     .from("english_lesson_cards")
-    .select("author_id, updated_at")
+    .select("updated_at")
     .eq("lesson_id", lessonId);
   if (error) throw error;
 
-  const context = accessContext(access);
-  const visible = ((data ?? []) as CardStamp[]).filter((card) =>
-    isCardVisible(context, card.author_id),
-  );
-  if (visible.length !== expectedCount) return false;
-  return visible.every((card) => notNewer(card.updated_at, sinceTime));
-}
-
-/** Nazwy autorów: właściciel + zapisani uczniowie. Bez tego fiszka byłaby anonimowa. */
-async function loadAuthors(access: Access, lessonId: string) {
-  const { admin, lesson } = access;
-  const authors: Record<string, string> = {};
-
-  const { data: ownerProfile } = await admin
-    .from("english_profiles")
-    .select("display_name")
-    .eq("user_id", lesson.owner_id)
-    .maybeSingle();
-  const ownerName =
-    (ownerProfile?.display_name as string | undefined) ||
-    ((lesson.teacher_name as string | null) ?? "") ||
-    "Nauczyciel";
-  authors[lesson.owner_id] = ownerName;
-
-  const { data: members, error } = await admin
-    .from("english_lesson_members")
-    .select("*")
-    .eq("lesson_id", lessonId)
-    .order("joined_at", { ascending: true });
-  if (error) throw error;
-
-  const rows = (members ?? []) as MemberRow[];
-  for (const member of rows) {
-    authors[member.user_id] = member.display_name || "Uczeń";
-  }
-  return { authors, members: rows };
+  const rows = (data ?? []) as Array<{ updated_at: string }>;
+  if (rows.length !== expectedCount) return false;
+  return rows.every((card) => notNewer(card.updated_at, sinceTime));
 }
 
 // ---------------------------------------------------------------------- router
@@ -441,12 +344,11 @@ Deno.serve(async (request) => {
     const url = new URL(request.url);
     const lessonId = url.searchParams.get("lessonId") ?? "";
     const cardId = url.searchParams.get("cardId") ?? "";
-    const memberId = url.searchParams.get("memberId") ?? "";
     const action = url.searchParams.get("action") ?? "";
     if (!lessonId) throw new HttpError(400, "Brak lessonId");
     if (!UUID_RE.test(lessonId)) throw new HttpError(400, "Nieprawidłowy identyfikator lekcji");
-    if (cardId && !UUID_RE.test(cardId)) throw new HttpError(400, "Nieprawidłowy identyfikator fiszki");
-    if (memberId && !UUID_RE.test(memberId)) throw new HttpError(400, "Nieprawidłowy identyfikator ucznia");
+    if (cardId && !UUID_RE.test(cardId))
+      throw new HttpError(400, "Nieprawidłowy identyfikator fiszki");
 
     const access = await resolveAccess(request, lessonId);
     const { admin, lesson, mode } = access;
@@ -469,87 +371,62 @@ Deno.serve(async (request) => {
         .order("created_at", { ascending: true });
       if (error) throw error;
 
-      const { authors, members } = await loadAuthors(access, lessonId);
-      const visibleCards = ((cards ?? []) as Array<{ author_id: string | null }>).filter((card) =>
-        isCardVisible(context, card.author_id),
-      );
-
-      // Licznik fiszek ucznia przyda się nauczycielowi w panelu lekcji.
-      const roster =
-        mode === "owner"
-          ? members.map((member) => ({
-              lesson_id: member.lesson_id,
-              user_id: member.user_id,
-              member_role: member.member_role,
-              display_name: member.display_name,
-              joined_at: member.joined_at,
-              card_count: ((cards ?? []) as Array<{ author_id: string | null }>).filter(
-                (card) => card.author_id === member.user_id,
-              ).length,
-            }))
-          : [];
-
       return json(request, {
         lesson: publicLesson(lesson, mode),
-        cards: visibleCards,
+        cards: cards ?? [],
         access: mode,
-        teacher_id: lesson.owner_id,
-        viewer: { user_id: access.viewerId, display_name: access.viewerName, access: mode },
-        authors,
-        members: roster,
-        drive: driveStateFor(access),
+        viewer: {
+          user_id: access.viewerId,
+          display_name: access.viewerName,
+          role: access.viewerRole,
+          access: mode,
+        },
+        counterpart: await loadCounterpart(access),
+        drive: await loadDriveState(access, lessonId),
       });
     }
 
     if (request.method === "POST" && action === "drive") {
       const state = driveStateSchema.parse(await parseBody(request));
-      if (mode === "member" && access.viewerId) {
-        const { error } = await admin
-          .from("english_lesson_members")
-          .update(state)
-          .eq("lesson_id", lessonId)
-          .eq("user_id", access.viewerId);
-        if (error) throw error;
-      } else {
-        const { error } = await admin.from("english_lessons").update(state).eq("id", lessonId);
-        if (error) throw error;
-      }
+      const { error } = await admin
+        .from("english_lesson_exports")
+        .upsert(
+          { lesson_id: lessonId, user_id: access.viewerId, ...state },
+          { onConflict: "lesson_id,user_id" },
+        );
+      if (error) throw error;
       return json(request, { drive: state });
     }
 
     if (request.method === "PATCH" && !cardId) {
-      if (!canEditLessonMeta(mode)) {
-        throw new HttpError(403, "Ustawienia lekcji zmienia tylko nauczyciel.");
-      }
-      if (mode === "shared" && lesson.status === "finished") {
-        throw new HttpError(423, "Lekcja jest zakończona. Właściciel może ją ponownie otworzyć.");
-      }
       const body = lessonPatchSchema.parse(await parseBody(request));
 
-      if (!canManageAccess(mode)) {
-        // Nauczyciel z tajnego linku poprawia treść lekcji, ale nie zarządza
-        // udostępnianiem, publikacją ani listą uczniów.
-        delete body.share_enabled;
-        delete body.join_enabled;
-        delete body.is_published;
-        delete body.peer_visibility;
-        delete body.rotate_share_token;
-        delete body.rotate_join_code;
-        if (body.status === "draft") delete body.status;
+      if (body.status !== undefined && !canChangeStatus(context)) {
+        throw new HttpError(403, "Status lekcji zmienia nauczyciel albo właściciel lekcji.");
+      }
+      if (
+        (body.assigned_teacher_id !== undefined || body.is_published !== undefined) &&
+        !canManageLesson(context)
+      ) {
+        throw new HttpError(403, "Przypisanie i publikację ustawia właściciel lekcji.");
+      }
+      const touchesMeta =
+        body.title !== undefined ||
+        body.lesson_date !== undefined ||
+        body.teacher_name !== undefined ||
+        body.description !== undefined ||
+        body.student_request !== undefined;
+      if (touchesMeta && !canEditLessonMeta(context)) {
+        throw new HttpError(423, "Lekcja jest zakończona.");
       }
 
-      const { rotate_share_token: rotateShare, rotate_join_code: rotateJoin, ...patch } = body;
-      const update: Record<string, unknown> = { ...patch };
-      if (rotateShare) update.share_token = newShareToken();
-      if (rotateJoin) update.join_code = await newJoinCode(admin);
-
-      if (Object.keys(update).length === 0) {
+      if (Object.keys(body).length === 0) {
         return json(request, { lesson: publicLesson(lesson, mode) });
       }
 
       const { data, error } = await admin
         .from("english_lessons")
-        .update(update)
+        .update(body)
         .eq("id", lessonId)
         .select("*")
         .single();
@@ -558,14 +435,21 @@ Deno.serve(async (request) => {
     }
 
     if (request.method === "POST" && !cardId) {
-      assertCanAddCards(access);
+      if (!canEditCards(context)) {
+        throw new HttpError(
+          403,
+          access.viewerRole === "student"
+            ? "Fiszki wypełnia nauczyciel. Ty możesz dopisać komentarz do każdej z nich."
+            : "Lekcja jest zakończona. Otwórz ją ponownie, żeby dodawać fiszki.",
+        );
+      }
       const rawBody = await parseBody(request);
-      const author_id = authorForNewCard(access);
+      const author_id = access.viewerId;
 
       // Rozróżniamy paczkę od pojedynczej fiszki po kształcie żądania.
-      // W v1.2.0 nieudany `safeParse` paczki cicho spadał do schematu
-      // pojedynczej fiszki i użytkownik dostawał komunikat o polu `cards`
-      // zamiast informacji, który wiersz importu jest zły.
+      // Nieudany `safeParse` paczki nie może cicho spaść do schematu pojedynczej
+      // fiszki, bo użytkownik dostałby komunikat o polu `cards` zamiast
+      // informacji, który wiersz importu jest zły.
       if (rawBody && typeof rawBody === "object" && "cards" in rawBody) {
         const batch = cardBatchCreateSchema.parse(rawBody);
         const rows = batch.cards.map((card: CardImportItem) => ({
@@ -588,40 +472,34 @@ Deno.serve(async (request) => {
       return json(request, { card: data }, 201);
     }
 
-    if ((request.method === "PATCH" || request.method === "DELETE") && cardId) {
-      const { data: existing, error: findError } = await admin
-        .from("english_lesson_cards")
-        .select("author_id")
-        .eq("id", cardId)
-        .eq("lesson_id", lessonId)
-        .maybeSingle();
-      if (findError) throw findError;
-      if (!existing) throw new HttpError(404, "Fiszka nie istnieje — mogła zostać usunięta.");
-
-      const authorId = (existing as { author_id: string | null }).author_id;
-      if (!isCardVisible(context, authorId)) {
-        throw new HttpError(404, "Fiszka nie istnieje — mogła zostać usunięta.");
+    if (request.method === "DELETE" && cardId) {
+      if (!canEditCards(context)) {
+        throw new HttpError(403, "Fiszki usuwa nauczyciel prowadzący lekcję.");
       }
-      if (!canEditCard(context, authorId)) {
+      const { error } = await admin
+        .from("english_lesson_cards")
+        .delete()
+        .eq("id", cardId)
+        .eq("lesson_id", lessonId);
+      if (error) throw error;
+      return new Response(null, { status: 204, headers: corsHeaders(request) });
+    }
+
+    if (request.method === "PATCH" && cardId) {
+      const rawBody = await parseBody(request);
+      const teacherMayEdit = canEditCards(context);
+      const studentMayComment = canEditStudentComment(context);
+
+      if (!teacherMayEdit && !studentMayComment) {
         throw new HttpError(
-          403,
-          lesson.status === "finished"
-            ? "Lekcja jest zakończona. Nauczyciel może ją ponownie otworzyć."
-            : "Możesz zmieniać tylko własne fiszki.",
+          423,
+          "Lekcja jest zakończona — treści i komentarzy nie da się już zmieniać.",
         );
       }
 
-      if (request.method === "DELETE") {
-        const { error } = await admin
-          .from("english_lesson_cards")
-          .delete()
-          .eq("id", cardId)
-          .eq("lesson_id", lessonId);
-        if (error) throw error;
-        return new Response(null, { status: 204, headers: corsHeaders(request) });
-      }
-
-      const body = cardPatchSchema.parse(await parseBody(request));
+      const body = teacherMayEdit
+        ? cardPatchSchema.parse(rawBody)
+        : studentCardPatchSchema.parse(rawBody);
       if (Object.keys(body).length === 0) throw new HttpError(400, "Pusty patch fiszki");
 
       const { data, error } = await admin
@@ -634,17 +512,6 @@ Deno.serve(async (request) => {
       if (error) throw error;
       if (!data) throw new HttpError(404, "Fiszka nie istnieje — mogła zostać usunięta.");
       return json(request, { card: data });
-    }
-
-    if (request.method === "DELETE" && memberId) {
-      if (!canManageAccess(mode)) throw new HttpError(403, "Listą uczniów zarządza nauczyciel.");
-      const { error } = await admin
-        .from("english_lesson_members")
-        .delete()
-        .eq("lesson_id", lessonId)
-        .eq("user_id", memberId);
-      if (error) throw error;
-      return new Response(null, { status: 204, headers: corsHeaders(request) });
     }
 
     throw new HttpError(405, "Nieobsługiwana metoda");

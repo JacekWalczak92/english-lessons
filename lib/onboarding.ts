@@ -1,4 +1,4 @@
-import type { AccessMode, AppRole } from "./types.ts";
+import type { AppRole } from "./types.ts";
 
 /**
  * Instruktaż przy pierwszym użyciu.
@@ -29,67 +29,72 @@ export const TOURS: Record<TourId, TourStep[]> = {
   "dashboard-teacher": [
     {
       target: null,
-      title: "Witaj w trybie nauczyciela",
-      body: "Trzy ekrany: lista lekcji, edytor fiszek i nauka. Pokażę je w pół minuty — instruktaż można w każdej chwili pominąć i wrócić do niego przyciskiem „Instrukcja”.",
+      title: "Witaj w panelu nauczyciela",
+      body: "Uczniowie przypisują Ci lekcje, a Ty je wypełniasz słówkami. Pokażę ekran w pół minuty — instruktaż można pominąć i wrócić do niego przyciskiem „Instrukcja”.",
+    },
+    {
+      target: "availability",
+      title: "Widoczność na liście",
+      body: "Dopóki przyjmujesz uczniów, widzą Cię przy zakładaniu lekcji. Po wyłączeniu znikasz z listy, ale przypisane lekcje zostają.",
+    },
+    {
+      target: "lesson-row",
+      title: "Lekcje od uczniów",
+      body: "Każda pozycja to prośba konkretnego ucznia. Otwórz ją, przeczytaj, czego potrzebuje, i wypełnij fiszkami.",
     },
     {
       target: "new-lesson",
-      title: "Lekcja na żywo",
-      body: "Tworzysz ją przed zajęciami. W trakcie lekcji dopisujesz słówka, a uczniowie dołączają kodem i dokładają własne fiszki.",
+      title: "Własna lekcja",
+      body: "Materiał przygotowany bez konkretnego ucznia — na przykład szkic na najbliższe zajęcia.",
     },
     {
       target: "new-set",
       title: "Gotowy zestaw słówek",
-      body: "Zestaw przygotowujesz raz i publikujesz w bibliotece. Uczniowie kopiują go na swoje konta, kiedy chcą — Twój oryginał zostaje nietknięty.",
-    },
-    {
-      target: "lesson-row",
-      title: "Kod dołączenia",
-      body: "Przy lekcji widać kod w formacie ABCD-EFGH. Podajesz go uczniom na zajęciach; pełne ustawienia dostępu są w otwartej lekcji.",
-    },
-    {
-      target: "study-button",
-      title: "Nauka",
-      body: "Powtórka słówek w przeglądarce — także dla Ciebie, gdy chcesz sprawdzić, jak wygląda materiał z lekcji.",
+      body: "Zestaw przygotowujesz raz i publikujesz w bibliotece. Uczniowie kopiują go na swoje konta, kiedy chcą.",
     },
     {
       target: "library",
       title: "Biblioteka",
-      body: "Tu trafiają opublikowane zestawy. Zobaczysz je tak samo jak uczniowie.",
+      body: "Tu trafiają opublikowane zestawy — Twoje i innych nauczycieli.",
     },
   ],
   "dashboard-student": [
     {
       target: null,
       title: "Witaj w trybie ucznia",
-      body: "Dołączasz do lekcji nauczyciela, dodajesz własne fiszki i powtarzasz słówka. Instruktaż możesz pominąć i wrócić do niego przyciskiem „Instrukcja”.",
+      body: "Zakładasz lekcję i przypisujesz ją nauczycielowi, on wypełnia ją słówkami, a Ty dopisujesz komentarze i powtarzasz materiał.",
     },
     {
-      target: "join-code",
-      title: "Kod od nauczyciela",
-      body: "Wpisz tu kod z tablicy albo z wiadomości (ABCD-EFGH). Po dołączeniu lekcja pojawi się na Twojej liście.",
+      target: "new-lesson",
+      title: "Wybierz nauczyciela",
+      body: "Nauczyciel z listy dostanie tę lekcję w swoim panelu. W polu „Czego potrzebujesz” napisz, co ma być na zajęciach.",
     },
     {
       target: "lesson-row",
       title: "Twoje lekcje",
-      body: "Otwórz lekcję, żeby zobaczyć słówka nauczyciela i dopisać własne. Edytujesz tylko swoje fiszki.",
+      body: "„Czeka na nauczyciela” znaczy, że fiszek jeszcze nie ma. Gdy się pojawią, otwórz lekcję i dopisz swoje komentarze.",
     },
     {
       target: "study-button",
       title: "Powtórka",
-      body: "Nauka pyta o słówka z tej lekcji: w obie strony, z osobnym trybem „do poprawki” dla tego, co ostatnio poszło źle.",
+      body: "Nauka pyta o słówka z lekcji: w obie strony, z osobnym trybem „do poprawki” dla tego, co ostatnio poszło źle.",
     },
     {
       target: "library",
       title: "Biblioteka",
-      body: "Gotowe zestawy od nauczycieli. „Skopiuj do moich lekcji” robi Twoją własną kopię, którą możesz edytować.",
+      body: "Gotowe zestawy od nauczycieli. „Skopiuj do moich lekcji” robi Twoją własną kopię do nauki.",
     },
   ],
   "lesson-teacher": [
     {
+      target: "student-request",
+      title: "Prośba ucznia",
+      body: "Zanim zaczniesz wypełniać, sprawdź, czego uczeń oczekuje od tej lekcji.",
+    },
+    {
       target: "quick-add",
       title: "Dodawanie fiszek",
-      body: "Cztery typy fiszek pod ręką, także skrótami Alt+1…Alt+4. Zmiany zapisują się same i pojawiają u uczniów po kilku sekundach.",
+      body: "Cztery typy fiszek pod ręką, także skrótami Alt+1…Alt+4. Zmiany zapisują się same i pojawiają u ucznia po kilku sekundach.",
     },
     {
       target: "import",
@@ -97,31 +102,26 @@ export const TOURS: Record<TourId, TourStep[]> = {
       body: "Wklejasz gotową listę w formacie POLSKI;ANGIELSKI;TYP;… Podgląd pokaże duplikaty i błędne wiersze przed dodaniem.",
     },
     {
-      target: "access",
-      title: "Dostęp i uczniowie",
-      body: "Kod dołączenia, widoczność fiszek między uczniami, publikacja zestawu i lista uczniów z licznikiem dodanych fiszek.",
-    },
-    {
       target: "toolbar",
       title: "Eksport i zakończenie",
-      body: "Eksport na Twój Google Drive zasila aplikację AnkiFiszki. „Zakończ lekcję” blokuje edycję uczniom, Tobie nie.",
+      body: "Eksport na Twój Google Drive zasila aplikację AnkiFiszki. „Zakończ lekcję” zamyka edycję obu stronom.",
     },
   ],
   "lesson-student": [
     {
-      target: "quick-add",
-      title: "Twoje fiszki",
-      body: "Dodajesz własne fiszki do tej lekcji. Słówka nauczyciela widzisz z podpisem „od nauczyciela” i ich nie zmieniasz.",
+      target: "student-request",
+      title: "Czego potrzebujesz",
+      body: "Napisz tu, co ma być na lekcji. Nauczyciel przeczyta to przed przygotowaniem fiszek.",
     },
     {
-      target: "import",
-      title: "Import listy",
-      body: "Masz notatki z lekcji? Wklej je jako listę zamiast przepisywać fiszka po fiszce.",
+      target: "student-comment-hint",
+      title: "Podział ról",
+      body: "Treść fiszek wypełnia nauczyciel. Twoje miejsce to pole „Komentarz ucznia” pod każdą fiszką — skojarzenia, kontekst, wątpliwości.",
     },
     {
       target: "toolbar",
       title: "Eksport na Twój Drive",
-      body: "Eksportujesz to, co widzisz w lekcji, na swój Google Drive — stamtąd wczytasz materiał do AnkiFiszki na telefonie.",
+      body: "Eksportujesz lekcję na swój Google Drive — stamtąd wczytasz materiał do AnkiFiszki na telefonie. Komentarz jedzie razem z fiszką.",
     },
     {
       target: "study-link",
@@ -138,7 +138,7 @@ export const TOURS: Record<TourId, TourStep[]> = {
     {
       target: "study-scope",
       title: "Co powtarzasz",
-      body: "Całą lekcję, tylko słówka nauczyciela, tylko swoje albo „do poprawki” — czyli to, co ostatnio poszło źle.",
+      body: "Całą lekcję, tylko fiszki z Twoim komentarzem albo „do poprawki” — czyli to, co ostatnio poszło źle.",
     },
   ],
 };
@@ -147,8 +147,8 @@ export function dashboardTour(role: AppRole): TourId {
   return role === "teacher" ? "dashboard-teacher" : "dashboard-student";
 }
 
-export function lessonTour(access: AccessMode): TourId {
-  return access === "member" ? "lesson-student" : "lesson-teacher";
+export function lessonTour(role: AppRole): TourId {
+  return role === "student" ? "lesson-student" : "lesson-teacher";
 }
 
 /**

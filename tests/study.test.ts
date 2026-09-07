@@ -15,8 +15,6 @@ import { hardCardIds, type LessonProgress } from "../lib/study-progress.ts";
 import type { LessonCard } from "../lib/types.ts";
 
 const TEACHER = "11111111-1111-1111-1111-111111111111";
-const ME = "22222222-2222-2222-2222-222222222222";
-const OTHER = "33333333-3333-3333-3333-333333333333";
 
 function card(overrides: Partial<LessonCard> = {}): LessonCard {
   return {
@@ -33,6 +31,7 @@ function card(overrides: Partial<LessonCard> = {}): LessonCard {
     example: "",
     british_variant: "",
     american_variant: "",
+    student_comment: "",
     order_index: 0,
     created_at: "2026-09-01T08:00:00+00:00",
     updated_at: "2026-09-01T08:00:00+00:00",
@@ -122,32 +121,22 @@ describe("dobór fiszek", () => {
     assert.equal(isStudyable(card({ card_type: "pronunciation", phonetic: "", pronunciation: "" })), false);
   });
 
-  it("zakres „moje” i „od nauczyciela” rozdziela autorów", () => {
+  it("zakres „z moim komentarzem” bierze tylko skomentowane fiszki", () => {
     const cards = [
-      card({ id: "t", author_id: TEACHER }),
-      card({ id: "link", author_id: null }),
-      card({ id: "mine", author_id: ME }),
-      card({ id: "other", author_id: OTHER }),
+      card({ id: "a", student_comment: "mylę z bill" }),
+      card({ id: "b" }),
+      card({ id: "c", student_comment: "   " }),
     ];
-    const context = { viewerId: ME, teacherId: TEACHER };
     assert.deepEqual(
-      filterByScope(cards, "teacher", context).map((entry) => entry.id),
-      ["t", "link"],
+      filterByScope(cards, "commented", {}).map((entry) => entry.id),
+      ["a"],
     );
-    assert.deepEqual(
-      filterByScope(cards, "mine", context).map((entry) => entry.id),
-      ["mine"],
-    );
-    assert.equal(filterByScope(cards, "all", context).length, 4);
+    assert.equal(filterByScope(cards, "all", {}).length, 3);
   });
 
   it("zakres „do poprawki” bierze tylko wskazane fiszki", () => {
     const cards = [card({ id: "a" }), card({ id: "b" })];
-    const filtered = filterByScope(cards, "hard", {
-      viewerId: ME,
-      teacherId: TEACHER,
-      hardCardIds: ["b"],
-    });
+    const filtered = filterByScope(cards, "hard", { hardCardIds: ["b"] });
     assert.deepEqual(filtered.map((entry) => entry.id), ["b"]);
   });
 
@@ -156,7 +145,7 @@ describe("dobór fiszek", () => {
     const items = buildStudyItems(cards, {
       scope: "all",
       direction: "card",
-      context: { viewerId: ME, teacherId: TEACHER },
+      context: {},
       shuffled: false,
     });
     assert.deepEqual(items.map((item) => item.cardId), ["a"]);

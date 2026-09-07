@@ -8,16 +8,13 @@ import { LessonEditor } from "@/components/LessonEditor";
 function LessonRoute() {
   const searchParams = useSearchParams();
   const lessonId = searchParams.get("id") ?? "";
-  const lessonKey = searchParams.get("key") ?? "";
 
   if (!lessonId) {
     return (
       <main className="center-shell">
         <div className="panel auth-panel">
           <h2>Brak identyfikatora lekcji</h2>
-          <p className="error">
-            Otwórz lekcję z panelu albo użyj pełnego linku otrzymanego od właściciela.
-          </p>
+          <p className="error">Otwórz lekcję z listy lekcji w swoim panelu.</p>
           <Link href="/dashboard" className="btn ghost" style={{ marginTop: 16, display: "inline-block" }}>
             ← Moje lekcje
           </Link>
@@ -26,7 +23,7 @@ function LessonRoute() {
     );
   }
 
-  return <LessonEditor lessonId={lessonId} lessonKey={lessonKey || undefined} />;
+  return <LessonEditor lessonId={lessonId} />;
 }
 
 export default function LessonPage() {

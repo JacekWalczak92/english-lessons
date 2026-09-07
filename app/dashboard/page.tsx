@@ -2,22 +2,24 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { JoinLessonBox } from "@/components/dashboard/JoinLessonBox";
 import { LessonList } from "@/components/dashboard/LessonList";
+import { NewLessonPanel } from "@/components/dashboard/NewLessonPanel";
 import { TourOverlay } from "@/components/onboarding/TourOverlay";
 import {
   createLesson,
   deleteLesson,
-  leaveLesson,
-  listJoinedLessons,
+  listAssignedLessons,
   listOwnedLessons,
+  listTeachers,
+  loadDisplayNames,
   loadProfile,
+  updateProfileSettings,
 } from "@/lib/account";
 import { dashboardTour } from "@/lib/onboarding";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
+import { useRouter } from "next/navigation";
 import { useTour } from "@/lib/use-tour";
-import type { AppProfile, Lesson } from "@/lib/types";
+import type { AppProfile, Lesson, TeacherDirectoryEntry } from "@/lib/types";
 
 /** Data w strefie użytkownika — `new Date().toISOString()` potrafi cofnąć o dobę. */
 function localDate(now = new Date()) {
@@ -31,7 +33,9 @@ export default function DashboardPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<AppProfile | null>(null);
   const [owned, setOwned] = useState<Lesson[]>([]);
-  const [joined, setJoined] = useState<Lesson[]>([]);
+  const [assigned, setAssigned] = useState<Lesson[]>([]);
+  const [teachers, setTeachers] = useState<TeacherDirectoryEntry[]>([]);
+  const [names, setNames] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
@@ -46,14 +50,26 @@ export default function DashboardPage() {
         router.replace("/");
         return;
       }
-      const [loadedProfile, ownedLessons, joinedLessons] = await Promise.all([
-        loadProfile(),
-        listOwnedLessons(),
-        listJoinedLessons(),
-      ]);
+
+      const loadedProfile = await loadProfile();
       setProfile(loadedProfile);
+
+      const [ownedLessons, assignedLessons] = await Promise.all([
+        listOwnedLessons(),
+        loadedProfile?.role === "teacher" ? listAssignedLessons() : Promise.resolve([]),
+      ]);
       setOwned(ownedLessons);
-      setJoined(joinedLessons);
+      setAssigned(assignedLessons);
+
+      if (loadedProfile?.role === "student") setTeachers(await listTeachers());
+
+      // Imiona drugiej strony każdej lekcji — jednym zapytaniem, nie po jednym na wiersz.
+      setNames(
+        await loadDisplayNames([
+          ...ownedLessons.map((lesson) => lesson.assigned_teacher_id ?? ""),
+          ...assignedLessons.map((lesson) => lesson.owner_id ?? ""),
+        ]),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Nie udało się pobrać lekcji.");
     } finally {
@@ -65,7 +81,38 @@ export default function DashboardPage() {
     void load();
   }, [load]);
 
-  async function addLesson(kind: "lesson" | "set") {
+  const tour = useTour(
+    profile ? dashboardTour(profile.role) : null,
+    profile?.user_id ?? null,
+    !busy && !!profile,
+  );
+
+  async function createStudentLesson(input: {
+    teacherId: string;
+    teacherName: string;
+    title: string;
+    lessonDate: string;
+    request: string;
+  }) {
+    setCreating(true);
+    setError("");
+    try {
+      const id = await createLesson({
+        title: input.title,
+        lessonDate: input.lessonDate,
+        kind: "lesson",
+        teacherId: input.teacherId,
+        teacherName: input.teacherName,
+        studentRequest: input.request,
+      });
+      router.push(`/lesson/?id=${encodeURIComponent(id)}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Nie udało się założyć lekcji.");
+      setCreating(false);
+    }
+  }
+
+  async function createTeacherLesson(kind: "lesson" | "set") {
     if (creating) return;
     setCreating(true);
     setError("");
@@ -97,15 +144,15 @@ export default function DashboardPage() {
     }
   }
 
-  async function leave(lesson: Lesson) {
-    if (!window.confirm(`Wypisać się z lekcji „${lesson.title}”?`)) return;
-    const snapshot = joined;
-    setJoined((current) => current.filter((item) => item.id !== lesson.id));
+  async function toggleAccepting(accepting: boolean) {
+    if (!profile) return;
+    const previous = profile;
+    setProfile({ ...profile, accepting_students: accepting });
     try {
-      await leaveLesson(lesson.id);
+      await updateProfileSettings({ accepting_students: accepting });
     } catch (e) {
-      setJoined(snapshot);
-      setError(e instanceof Error ? e.message : "Nie udało się wypisać z lekcji.");
+      setProfile(previous);
+      setError(e instanceof Error ? e.message : "Nie udało się zmienić ustawienia.");
     }
   }
 
@@ -115,13 +162,7 @@ export default function DashboardPage() {
   }
 
   const isTeacher = profile?.role === "teacher";
-  const tour = useTour(
-    profile ? dashboardTour(profile.role) : null,
-    profile?.user_id ?? null,
-    !busy && !!profile,
-  );
-
-  const lessons = owned.filter((lesson) => lesson.lesson_kind === "lesson");
+  const ownLessons = owned.filter((lesson) => lesson.lesson_kind === "lesson");
   const sets = owned.filter((lesson) => lesson.lesson_kind === "set");
 
   return (
@@ -130,13 +171,13 @@ export default function DashboardPage() {
         <div>
           <div className="brand">J-Learner</div>
           <h1 style={{ marginBottom: 0 }}>
-            {isTeacher ? "Lekcje angielskiego" : "Moje fiszki z lekcji"}
+            {isTeacher ? "Panel nauczyciela" : "Moje lekcje angielskiego"}
           </h1>
           {profile && (
             <div className="lesson-meta" style={{ marginTop: 6 }}>
               <span>{profile.display_name || "konto bez nazwy"}</span>
               <span className="badge">
-                {profile.role === "teacher" ? "konto nauczyciela" : "konto ucznia"}
+                {isTeacher ? "konto nauczyciela" : "konto ucznia"}
               </span>
             </div>
           )}
@@ -153,15 +194,15 @@ export default function DashboardPage() {
               <button
                 className="btn"
                 data-tour="new-lesson"
-                onClick={() => void addLesson("lesson")}
+                onClick={() => void createTeacherLesson("lesson")}
                 disabled={creating}
               >
-                {creating ? "Tworzę…" : "+ Nowa lekcja"}
+                {creating ? "Tworzę…" : "+ Własna lekcja"}
               </button>
               <button
                 className="btn secondary"
                 data-tour="new-set"
-                onClick={() => void addLesson("set")}
+                onClick={() => void createTeacherLesson("set")}
                 disabled={creating}
               >
                 + Nowy zestaw słówek
@@ -180,17 +221,46 @@ export default function DashboardPage() {
         </p>
       )}
 
-      {!isTeacher && <JoinLessonBox onJoined={() => void load()} />}
+      {isTeacher && profile && (
+        <section className="panel availability" data-tour="availability">
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={profile.accepting_students}
+              onChange={(event) => void toggleAccepting(event.target.checked)}
+            />
+            <span>Przyjmuję nowych uczniów</span>
+          </label>
+          <p className="muted small">
+            Gdy wyłączysz, znikasz z listy wyboru u uczniów. Lekcje już przypisane zostają.
+          </p>
+        </section>
+      )}
+
+      {!isTeacher && profile && (
+        <NewLessonPanel
+          teachers={teachers}
+          defaultDate={localDate()}
+          busy={creating}
+          onCreate={(input) => void createStudentLesson(input)}
+        />
+      )}
 
       {busy ? (
         <div className="panel empty">Pobieram lekcje…</div>
       ) : isTeacher ? (
         <>
           <LessonList
-            title="Lekcje na żywo"
-            emptyText="Utwórz lekcję i podaj uczniom kod dołączenia."
-            lessons={lessons}
-            showJoinCode
+            title="Lekcje przypisane przez uczniów"
+            emptyText="Nikt jeszcze nie przypisał Ci lekcji. Uczeń wybiera Cię z listy nauczycieli."
+            lessons={assigned}
+            names={names}
+            counterpartField="owner_id"
+          />
+          <LessonList
+            title="Moje lekcje"
+            emptyText="Własne lekcje przydają się na materiał przygotowany bez konkretnego ucznia."
+            lessons={ownLessons}
             onDelete={(lesson) => void removeLesson(lesson)}
           />
           <LessonList
@@ -201,29 +271,14 @@ export default function DashboardPage() {
           />
         </>
       ) : (
-        <>
-          <LessonList
-            title="Lekcje z nauczycielem"
-            emptyText="Wpisz kod od nauczyciela powyżej, żeby dołączyć do lekcji."
-            lessons={joined}
-            onLeave={(lesson) => void leave(lesson)}
-          />
-          <LessonList
-            title="Moje własne lekcje i kopie z biblioteki"
-            emptyText="Skopiuj gotowy zestaw z biblioteki albo utwórz własną lekcję."
-            lessons={owned}
-            onDelete={(lesson) => void removeLesson(lesson)}
-            footer={
-              <button
-                className="btn secondary small-btn"
-                onClick={() => void addLesson("lesson")}
-                disabled={creating}
-              >
-                {creating ? "Tworzę…" : "+ Własna lekcja"}
-              </button>
-            }
-          />
-        </>
+        <LessonList
+          title="Moje lekcje"
+          emptyText="Wybierz nauczyciela powyżej, żeby założyć pierwszą lekcję."
+          lessons={owned}
+          names={names}
+          counterpartField="assigned_teacher_id"
+          onDelete={(lesson) => void removeLesson(lesson)}
+        />
       )}
 
       {tour.active && <TourOverlay steps={tour.steps} onFinish={tour.finish} />}

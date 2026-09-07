@@ -38,7 +38,7 @@ const DIRECTION_LABELS: Array<{ value: StudyDirection; label: string; hint: stri
  * odkłada ją o kilka pozycji dalej zamiast usuwać. Wynik ląduje w localStorage,
  * więc następnym razem można wrócić samymi trudnymi słówkami.
  */
-export function StudySession({ lessonId, lessonKey }: { lessonId: string; lessonKey?: string }) {
+export function StudySession({ lessonId }: { lessonId: string }) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [error, setError] = useState("");
   const [data, setData] = useState<LessonPayload | null>(null);
@@ -57,7 +57,7 @@ export function StudySession({ lessonId, lessonKey }: { lessonId: string; lesson
     let active = true;
     (async () => {
       try {
-        const result = await lessonApi.get({ lessonId, lessonKey });
+        const result = await lessonApi.get({ lessonId });
         if (!active) return;
         if (isUnchanged(result)) throw new Error("Nieoczekiwana odpowiedź serwera.");
         setData(result);
@@ -72,26 +72,18 @@ export function StudySession({ lessonId, lessonKey }: { lessonId: string; lesson
     return () => {
       active = false;
     };
-  }, [lessonId, lessonKey]);
+  }, [lessonId]);
 
   const tour = useTour("study", data?.viewer.user_id ?? null, phase === "setup");
 
-  const scopeContext = useMemo(
-    () => ({
-      viewerId: data?.viewer.user_id ?? null,
-      teacherId: data?.teacher_id ?? null,
-      hardCardIds: hard,
-    }),
-    [data, hard],
-  );
+  const scopeContext = useMemo(() => ({ hardCardIds: hard }), [hard]);
 
   const counts = useMemo(() => {
     const cards = data?.cards ?? [];
     const studyable = cards.filter(isStudyable);
     return {
       all: studyable.length,
-      teacher: filterByScope(studyable, "teacher", scopeContext).length,
-      mine: filterByScope(studyable, "mine", scopeContext).length,
+      commented: filterByScope(studyable, "commented", scopeContext).length,
       hard: filterByScope(studyable, "hard", scopeContext).length,
       skipped: cards.length - studyable.length,
     };
@@ -167,7 +159,7 @@ export function StudySession({ lessonId, lessonKey }: { lessonId: string; lesson
   }, [answer, phase, revealed]);
 
   const backLink = (
-    <Link className="btn ghost small-btn" href={`/lesson/?id=${encodeURIComponent(lessonId)}${lessonKey ? `&key=${encodeURIComponent(lessonKey)}` : ""}`}>
+    <Link className="btn ghost small-btn" href={`/lesson/?id=${encodeURIComponent(lessonId)}`}>
       ← Do lekcji
     </Link>
   );
@@ -197,8 +189,7 @@ export function StudySession({ lessonId, lessonKey }: { lessonId: string; lesson
   if (phase === "setup") {
     const scopeButtons: Array<{ value: StudyScope; label: string; count: number }> = [
       { value: "all", label: "Wszystkie słówka", count: counts.all },
-      { value: "teacher", label: "Od nauczyciela", count: counts.teacher },
-      { value: "mine", label: "Moje fiszki", count: counts.mine },
+      { value: "commented", label: "Z moim komentarzem", count: counts.commented },
       { value: "hard", label: "Do poprawki", count: counts.hard },
     ];
 
@@ -376,6 +367,9 @@ export function StudySession({ lessonId, lessonKey }: { lessonId: string; lesson
             )}
             {current.card.note.trim() && (
               <p className="small muted">Notatka: {current.card.note.trim()}</p>
+            )}
+            {current.card.student_comment.trim() && (
+              <p className="small muted">Mój komentarz: {current.card.student_comment.trim()}</p>
             )}
             {current.card.card_type === "british" && current.card.american_variant.trim() && (
               <p className="small muted">Amerykański: {current.card.american_variant.trim()}</p>

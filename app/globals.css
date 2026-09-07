@@ -262,3 +262,25 @@ h2 { margin: 0; }
 .tour-tooltip p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--muted); }
 .tour-step-count { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
 .tour-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 14px; }
+
+/* --- v1.7.0: przypisanie nauczyciela i komentarz ucznia --- */
+.section-title { font-size: 15px; margin: 0 0 10px; }
+.new-lesson-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: end; }
+.new-lesson-form .field-wide { grid-column: 1 / -1; }
+.new-lesson-form .btn { grid-column: 1 / -1; }
+
+.availability { padding: 14px 16px; margin-bottom: 20px; display: grid; gap: 6px; }
+
+.request-panel { padding: 16px; margin-bottom: 16px; }
+
+.student-comment { border-top: 1px dashed var(--border); margin-top: 14px; padding-top: 12px; }
+.student-comment .textarea { min-height: 64px; }
+
+.student-hint {
+  display: block; padding: 12px 14px; border-radius: 12px;
+  background: var(--surface-2); color: var(--muted); font-size: 13px; margin-bottom: 16px;
+}
+
+@media (max-width: 720px) {
+  .new-lesson-form { grid-template-columns: 1fr; }
+}

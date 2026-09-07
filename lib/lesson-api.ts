@@ -30,7 +30,6 @@ export class LessonApiError extends Error {
 
 type RequestOptions = {
   lessonId: string;
-  lessonKey?: string;
   cardId?: string;
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   query?: Record<string, string>;
@@ -54,7 +53,6 @@ async function request<T>(options: RequestOptions): Promise<T> {
     "Content-Type": "application/json",
     ...(await authHeaders()),
   };
-  if (options.lessonKey) headers["x-lesson-key"] = options.lessonKey;
 
   let response: Response;
   try {
@@ -85,7 +83,8 @@ async function request<T>(options: RequestOptions): Promise<T> {
   return (await response.json()) as T;
 }
 
-export type LessonScope = { lessonId: string; lessonKey?: string };
+/** Od v1.7.0 dostęp wynika wyłącznie z konta — nie ma kluczy w adresie. */
+export type LessonScope = { lessonId: string };
 
 export const lessonApi = {
   /**
@@ -126,10 +125,7 @@ export const lessonApi = {
     return request<void>({ ...scope, cardId, method: "DELETE" });
   },
 
-  /**
-   * Stan eksportu na Drive. Właścicielowi zapisuje się w lekcji, uczniowi w jego
-   * członkostwie — każde konto ma własny plik w swoim Drive.
-   */
+  /** Stan eksportu na Drive — osobny dla każdego konta w lekcji. */
   saveDrive(scope: LessonScope, state: DriveState) {
     return request<{ drive: DriveState }>({
       ...scope,
@@ -137,10 +133,5 @@ export const lessonApi = {
       query: { action: "drive" },
       body: state,
     });
-  },
-
-  /** Usunięcie ucznia z lekcji. Jego dotychczasowe fiszki zostają u nauczyciela. */
-  removeMember(scope: LessonScope, userId: string) {
-    return request<void>({ ...scope, method: "DELETE", query: { memberId: userId } });
   },
 };

@@ -42,8 +42,6 @@ export type LessonActions = {
   deleteCard: (cardId: string) => Promise<void>;
   /** Zapisuje stan eksportu na Drive dla bieżącego konta (nauczyciela albo ucznia). */
   saveDrive: (state: DriveState) => Promise<void>;
-  /** Usuwa ucznia z lekcji. Tylko właściciel. */
-  removeMember: (userId: string) => Promise<void>;
   moveCard: (cardId: string, direction: -1 | 1) => Promise<void>;
   /** Wypycha wszystkie oczekujące zmiany i zwraca świeży stan z serwera. */
   flushAndReload: () => Promise<LessonPayload | null>;
@@ -69,7 +67,7 @@ function sortCards(cards: LessonCard[]) {
  * ani przetestować osobno.
  */
 export function useLesson(scope: LessonScope): LessonState & { actions: LessonActions } {
-  const { lessonId, lessonKey } = scope;
+  const { lessonId } = scope;
 
   const [data, setData] = useState<LessonPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -97,8 +95,8 @@ export function useLesson(scope: LessonScope): LessonState & { actions: LessonAc
 
   const scopeRef = useRef<LessonScope>(scope);
   useEffect(() => {
-    scopeRef.current = { lessonId, lessonKey };
-  }, [lessonId, lessonKey]);
+    scopeRef.current = { lessonId };
+  }, [lessonId]);
 
   const hasPending = useCallback(
     () => cardPatches.current.size > 0 || Object.keys(lessonPatch.current).length > 0,
@@ -249,9 +247,9 @@ export function useLesson(scope: LessonScope): LessonState & { actions: LessonAc
 
   const updateLesson = useCallback(
     (patch: LessonPatch, immediate = false) => {
-      // Flagi rotacji nie są polami lekcji — nowy token przychodzi z serwera.
-      const { rotate_share_token: _rotateShare, rotate_join_code: _rotateJoin, ...optimistic } = patch;
-      patchLocal((current) => ({ ...current, lesson: { ...current.lesson, ...optimistic } }));
+      // Każde pole patcha jest teraz zwykłą kolumną lekcji, więc pokazujemy
+      // zmianę od razu i czekamy tylko na potwierdzenie z serwera.
+      patchLocal((current) => ({ ...current, lesson: { ...current.lesson, ...patch } }));
       lessonPatch.current = { ...lessonPatch.current, ...patch };
       refreshPendingCount();
       setSyncState("saving");
@@ -485,17 +483,6 @@ export function useLesson(scope: LessonScope): LessonState & { actions: LessonAc
     [patchLocal],
   );
 
-  const removeMember = useCallback(
-    async (userId: string) => {
-      await lessonApi.removeMember(scopeRef.current, userId);
-      patchLocal((current) => ({
-        ...current,
-        members: current.members.filter((member) => member.user_id !== userId),
-      }));
-    },
-    [patchLocal],
-  );
-
   const flushAndReload = useCallback(async () => {
     await flushAll();
     const result = await lessonApi.get(scopeRef.current);
@@ -521,7 +508,6 @@ export function useLesson(scope: LessonScope): LessonState & { actions: LessonAc
       createCards,
       deleteCard,
       saveDrive,
-      removeMember,
       moveCard,
       flushAndReload,
       retryNow,
@@ -533,7 +519,6 @@ export function useLesson(scope: LessonScope): LessonState & { actions: LessonAc
       deleteCard,
       flushAndReload,
       moveCard,
-      removeMember,
       retryNow,
       saveDrive,
       updateCard,

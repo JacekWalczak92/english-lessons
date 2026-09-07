@@ -88,8 +88,8 @@ export default function HomePage() {
         <div className="brand">J-Learner</div>
         <h1>English Lessons</h1>
         <p className="muted">
-          Wspólny edytor fiszek na lekcje angielskiego. Nauczyciel prowadzi lekcje i zestawy
-          słówek, uczeń dołącza kodem i robi własne fiszki.
+          Fiszki z lekcji angielskiego w jednym miejscu. Uczeń zamawia lekcję u wybranego
+          nauczyciela, nauczyciel wypełnia ją słówkami, uczeń dopisuje komentarze i powtarza.
         </p>
 
         {checkingSession ? (
@@ -151,8 +151,8 @@ export default function HomePage() {
                     </div>
                     <span className="small muted">
                       {role === "student"
-                        ? "Dołączasz do lekcji kodem i robisz własne fiszki."
-                        : "Tworzysz lekcje, kody dla uczniów i gotowe zestawy słówek."}{" "}
+                        ? "Zakładasz lekcje i przypisujesz je nauczycielowi z listy."
+                        : "Wypełniasz lekcje przypisane przez uczniów i gotowe zestawy słówek."}{" "}
                       Konto ma jeden tryb na stałe — do drugiej roli zakłada się osobne konto.
                     </span>
                   </div>

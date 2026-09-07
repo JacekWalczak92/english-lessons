@@ -38,26 +38,16 @@ describe("stałe domenowe frontend ↔ edge function", () => {
     });
   }
 
-  it("JOIN_CODE_ALPHABET i JOIN_CODE_LENGTH są identyczne", () => {
-    for (const line of ["JOIN_CODE_ALPHABET", "JOIN_CODE_LENGTH"]) {
-      const pattern = new RegExp(`export const ${line} = (.*);`);
-      const frontend = FRONTEND.match(pattern);
-      const edge = EDGE.match(pattern);
-      assert.ok(frontend && edge, `nie znaleziono stałej ${line}`);
-      assert.equal(frontend[1], edge[1]);
-    }
-  });
 });
 
 describe("reguły dostępu frontend ↔ edge function", () => {
   for (const name of [
-    "isLessonCard",
-    "isCardVisible",
-    "canEditCard",
-    "canAddCards",
+    "canEditCards",
+    "canEditStudentComment",
     "canEditLessonMeta",
-    "canManageAccess",
-    "normalizeJoinCode",
+    "canChangeStatus",
+    "canManageLesson",
+    "canAssignTeacher",
   ]) {
     it(`${name} ma identyczną implementację`, () => {
       assert.equal(extractFunction(FRONTEND, name), extractFunction(EDGE, name));

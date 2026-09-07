@@ -15,10 +15,10 @@ type Props = {
   card: LessonCard;
   index: number;
   total: number;
-  /** Fiszka tylko do odczytu: cudza fiszka albo zakończona lekcja. */
+  /** Treść fiszki tylko do odczytu — u ucznia zawsze, u nauczyciela po zakończeniu lekcji. */
   locked: boolean;
-  /** Podpis autora — pusty dla własnych fiszek, żeby nie zaśmiecać widoku. */
-  authorLabel?: string;
+  /** Czy można edytować komentarz ucznia (u nauczyciela komentarz jest do odczytu). */
+  commentEditable: boolean;
   onChange: (cardId: string, patch: CardPatch) => void;
   onDelete: (cardId: string) => void;
   onMove: (cardId: string, direction: -1 | 1) => void;
@@ -33,7 +33,7 @@ export const CardEditor = memo(function CardEditor({
   index,
   total,
   locked,
-  authorLabel,
+  commentEditable,
   onChange,
   onDelete,
   onMove,
@@ -68,7 +68,7 @@ export const CardEditor = memo(function CardEditor({
 
         <span className="card-index">#{index + 1}</span>
 
-        {authorLabel && <span className="badge author-badge">{authorLabel}</span>}
+        {card.student_comment.trim() && <span className="badge author-badge">komentarz</span>}
 
         <div className="btn-row">
           <button
@@ -228,6 +228,30 @@ export const CardEditor = memo(function CardEditor({
           </div>
         )}
       </div>
+
+      {(commentEditable || card.student_comment.trim()) && (
+      <div className="student-comment">
+        <Field
+          label="Komentarz ucznia"
+          hint={
+            commentEditable
+              ? "Twoje miejsce: skojarzenie, kontekst z lekcji, czego nie rozumiesz."
+              : undefined
+          }
+        >
+          {(props) => (
+            <textarea
+              {...props}
+              className="textarea"
+              disabled={!commentEditable}
+              value={card.student_comment}
+              placeholder={commentEditable ? "np. mylę to ze słowem „bill” w znaczeniu dziób" : ""}
+              onChange={(event) => onChange(card.id, { student_comment: event.target.value })}
+            />
+          )}
+        </Field>
+      </div>
+      )}
     </article>
   );
 });

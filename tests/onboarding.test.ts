@@ -15,10 +15,9 @@ describe("dobór instruktażu", () => {
     assert.equal(dashboardTour("student"), "dashboard-student");
   });
 
-  it("edytor zależy od trybu dostępu, nie od roli", () => {
-    assert.equal(lessonTour("member"), "lesson-student");
-    assert.equal(lessonTour("owner"), "lesson-teacher");
-    assert.equal(lessonTour("shared"), "lesson-teacher");
+  it("edytor zależy od roli konta", () => {
+    assert.equal(lessonTour("student"), "lesson-student");
+    assert.equal(lessonTour("teacher"), "lesson-teacher");
   });
 });
 

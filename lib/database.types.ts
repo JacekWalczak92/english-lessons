@@ -15,12 +15,10 @@ export type LessonRow = {
   status: LessonStatus;
   lesson_kind: LessonKind;
   description: string;
-  share_enabled: boolean;
-  share_token: string;
-  join_code: string;
-  join_enabled: boolean;
+  assigned_teacher_id: string | null;
+  assigned_at: string | null;
+  student_request: string;
   is_published: boolean;
-  peer_visibility: boolean;
   card_count: number;
   source_lesson_id: string | null;
   drive_file_id: string | null;
@@ -39,10 +37,9 @@ export type LessonInsert = {
   status?: LessonStatus;
   lesson_kind?: LessonKind;
   description?: string;
-  share_enabled?: boolean;
-  join_enabled?: boolean;
+  assigned_teacher_id?: string | null;
+  student_request?: string;
   is_published?: boolean;
-  peer_visibility?: boolean;
 };
 
 export type LessonUpdate = Partial<Omit<LessonRow, "id" | "owner_id" | "created_at">>;
@@ -55,6 +52,7 @@ export type ProfileRow = {
   user_id: string;
   role: AppRole;
   display_name: string;
+  accepting_students: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -63,28 +61,24 @@ export type ProfileInsert = {
   user_id: string;
   role?: AppRole;
   display_name?: string;
+  accepting_students?: boolean;
 };
 
-export type ProfileUpdate = Partial<Pick<ProfileRow, "role" | "display_name">>;
+export type ProfileUpdate = Partial<
+  Pick<ProfileRow, "display_name" | "accepting_students">
+>;
 
-export type MemberRow = {
+export type ExportRow = {
   lesson_id: string;
   user_id: string;
-  member_role: AppRole;
-  display_name: string;
   drive_file_id: string | null;
   drive_file_name: string | null;
   last_exported_at: string | null;
-  joined_at: string;
   updated_at: string;
 };
 
-export type MemberInsert = Omit<MemberRow, "joined_at" | "updated_at"> & {
-  joined_at?: string;
-  updated_at?: string;
-};
-
-export type MemberUpdate = Partial<Omit<MemberRow, "lesson_id" | "user_id">>;
+export type ExportInsert = Omit<ExportRow, "updated_at"> & { updated_at?: string };
+export type ExportUpdate = Partial<Omit<ExportRow, "lesson_id" | "user_id">>;
 
 export type Database = {
   public: {
@@ -107,24 +101,15 @@ export type Database = {
         Update: ProfileUpdate;
         Relationships: [];
       };
-      english_lesson_members: {
-        Row: MemberRow;
-        Insert: MemberInsert;
-        Update: MemberUpdate;
+      english_lesson_exports: {
+        Row: ExportRow;
+        Insert: ExportInsert;
+        Update: ExportUpdate;
         Relationships: [];
       };
     };
     Views: Record<never, never>;
     Functions: {
-      english_join_lesson: {
-        Args: { p_code: string };
-        Returns: Array<{
-          lesson_id: string;
-          title: string;
-          teacher_name: string | null;
-          already_member: boolean;
-        }>;
-      };
       english_copy_lesson: {
         Args: { p_source: string; p_title?: string | null };
         Returns: string;

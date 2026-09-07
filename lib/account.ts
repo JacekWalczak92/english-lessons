@@ -1,10 +1,14 @@
 "use client";
 
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
-import type { LibraryEntry } from "@/lib/types";
-import { isAppRole, normalizeJoinCode, type AppProfile, type AppRole, type Lesson } from "@/lib/types";
-
-const LESSON_COLUMNS = "*";
+import { isAppRole } from "@/lib/types";
+import type {
+  AppProfile,
+  AppRole,
+  Lesson,
+  LibraryEntry,
+  TeacherDirectoryEntry,
+} from "@/lib/types";
 
 /**
  * Profil roli. Wiersz zakłada trigger na `auth.users`, ale konta z v1.3.0
@@ -19,7 +23,7 @@ export async function loadProfile(): Promise<AppProfile | null> {
 
   const { data, error } = await supabase
     .from("english_profiles")
-    .select("user_id, role, display_name")
+    .select("user_id, role, display_name, accepting_students")
     .eq("user_id", user.id)
     .maybeSingle();
   if (error) throw error;
@@ -29,6 +33,7 @@ export async function loadProfile(): Promise<AppProfile | null> {
       user_id: data.user_id,
       role: isAppRole(data.role) ? data.role : "student",
       display_name: data.display_name ?? "",
+      accepting_students: data.accepting_students ?? true,
     };
   }
 
@@ -40,7 +45,7 @@ export async function loadProfile(): Promise<AppProfile | null> {
   const { data: created, error: insertError } = await supabase
     .from("english_profiles")
     .insert({ user_id: user.id, role, display_name: displayName })
-    .select("user_id, role, display_name")
+    .select("user_id, role, display_name, accepting_students")
     .single();
   if (insertError) throw insertError;
 
@@ -48,23 +53,45 @@ export async function loadProfile(): Promise<AppProfile | null> {
     user_id: created.user_id,
     role: isAppRole(created.role) ? created.role : "student",
     display_name: created.display_name ?? "",
+    accepting_students: created.accepting_students ?? true,
   };
 }
 
 /**
- * Zmienić da się tylko imię. Rola jest przypisana do konta na stałe przy
- * rejestracji — pilnuje tego również wyzwalacz w bazie, więc nawet ręcznie
- * spreparowane żądanie jej nie podmieni.
+ * Zmienić da się imię i gotowość przyjmowania uczniów. Rola jest przypisana
+ * do konta na stałe — pilnuje tego również wyzwalacz w bazie.
  */
-export async function updateDisplayName(displayName: string) {
+export async function updateProfileSettings(patch: {
+  display_name?: string;
+  accepting_students?: boolean;
+}) {
   const supabase = getSupabaseBrowser();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) throw new Error("Sesja wygasła — zaloguj się ponownie.");
   const { error } = await supabase
     .from("english_profiles")
-    .update({ display_name: displayName.trim().slice(0, 80) })
+    .update({
+      ...(patch.display_name === undefined
+        ? {}
+        : { display_name: patch.display_name.trim().slice(0, 80) }),
+      ...(patch.accepting_students === undefined
+        ? {}
+        : { accepting_students: patch.accepting_students }),
+    })
     .eq("user_id", userData.user.id);
   if (error) throw error;
+}
+
+/** Katalog nauczycieli — z niego uczeń wybiera prowadzącego lekcję. */
+export async function listTeachers(): Promise<TeacherDirectoryEntry[]> {
+  const { data, error } = await getSupabaseBrowser()
+    .from("english_profiles")
+    .select("user_id, display_name, accepting_students")
+    .eq("role", "teacher")
+    .order("display_name", { ascending: true })
+    .limit(200);
+  if (error) throw error;
+  return (data ?? []) as TeacherDirectoryEntry[];
 }
 
 /** Lekcje i zestawy, których jestem właścicielem. */
@@ -74,7 +101,7 @@ export async function listOwnedLessons(): Promise<Lesson[]> {
   if (!userData.user) return [];
   const { data, error } = await supabase
     .from("english_lessons")
-    .select(LESSON_COLUMNS)
+    .select("*")
     .eq("owner_id", userData.user.id)
     .order("lesson_date", { ascending: false })
     .order("created_at", { ascending: false });
@@ -82,28 +109,44 @@ export async function listOwnedLessons(): Promise<Lesson[]> {
   return (data ?? []) as Lesson[];
 }
 
-/** Lekcje, do których dołączyłem kodem. */
-export async function listJoinedLessons(): Promise<Lesson[]> {
+/** Lekcje, które uczniowie przypisali mnie jako nauczycielowi. */
+export async function listAssignedLessons(): Promise<Lesson[]> {
   const supabase = getSupabaseBrowser();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return [];
   const { data, error } = await supabase
-    .from("english_lesson_members")
-    .select("lesson_id, joined_at, english_lessons(*)")
-    .eq("user_id", userData.user.id)
-    .order("joined_at", { ascending: false });
+    .from("english_lessons")
+    .select("*")
+    .eq("assigned_teacher_id", userData.user.id)
+    .order("lesson_date", { ascending: false })
+    .order("assigned_at", { ascending: false });
   if (error) throw error;
+  return (data ?? []) as Lesson[];
+}
 
-  type Joined = { english_lessons: Lesson | Lesson[] | null };
-  return ((data ?? []) as unknown as Joined[])
-    .map((row) => (Array.isArray(row.english_lessons) ? row.english_lessons[0] : row.english_lessons))
-    .filter((lesson): lesson is Lesson => !!lesson);
+/**
+ * Imiona kont powiązanych z lekcjami (nauczyciel ucznia, uczeń nauczyciela).
+ * RLS wpuszcza tu tylko profile nauczycieli i osób, z którymi dzielę lekcję.
+ */
+export async function loadDisplayNames(userIds: string[]): Promise<Record<string, string>> {
+  const unique = [...new Set(userIds.filter(Boolean))];
+  if (unique.length === 0) return {};
+  const { data, error } = await getSupabaseBrowser()
+    .from("english_profiles")
+    .select("user_id, display_name")
+    .in("user_id", unique);
+  if (error) throw error;
+  return Object.fromEntries(
+    ((data ?? []) as Array<{ user_id: string; display_name: string }>).map((row) => [
+      row.user_id,
+      row.display_name,
+    ]),
+  );
 }
 
 /** Gotowe zestawy opublikowane przez nauczycieli. */
 export async function listLibrary(): Promise<LibraryEntry[]> {
-  const supabase = getSupabaseBrowser();
-  const { data, error } = await supabase
+  const { data, error } = await getSupabaseBrowser()
     .from("english_lessons")
     .select("id, title, description, teacher_name, card_count, lesson_date, updated_at")
     .eq("lesson_kind", "set")
@@ -114,11 +157,17 @@ export async function listLibrary(): Promise<LibraryEntry[]> {
   return (data ?? []) as LibraryEntry[];
 }
 
+/**
+ * Nowa lekcja. Uczeń zawsze wskazuje nauczyciela z katalogu — to zastąpiło
+ * kody dołączenia. Nauczyciel zakłada lekcję albo zestaw bez przypisania.
+ */
 export async function createLesson(options: {
   title: string;
   lessonDate: string;
   kind: "lesson" | "set";
+  teacherId?: string | null;
   teacherName?: string | null;
+  studentRequest?: string;
 }): Promise<string> {
   const supabase = getSupabaseBrowser();
   const { data: userData } = await supabase.auth.getUser();
@@ -130,7 +179,9 @@ export async function createLesson(options: {
       lesson_date: options.lessonDate,
       title: options.title,
       lesson_kind: options.kind,
+      assigned_teacher_id: options.teacherId ?? null,
       teacher_name: options.teacherName ?? null,
+      student_request: options.studentRequest?.trim() ?? "",
     })
     .select("id")
     .single();
@@ -139,48 +190,11 @@ export async function createLesson(options: {
 }
 
 export async function deleteLesson(lessonId: string) {
-  const { error } = await getSupabaseBrowser()
-    .from("english_lessons")
-    .delete()
-    .eq("id", lessonId);
+  const { error } = await getSupabaseBrowser().from("english_lessons").delete().eq("id", lessonId);
   if (error) throw error;
 }
 
-/** Wypisanie się z lekcji. Fiszki zostają u nauczyciela — usuwamy tylko dostęp. */
-export async function leaveLesson(lessonId: string) {
-  const supabase = getSupabaseBrowser();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) throw new Error("Sesja wygasła — zaloguj się ponownie.");
-  const { error } = await supabase
-    .from("english_lesson_members")
-    .delete()
-    .eq("lesson_id", lessonId)
-    .eq("user_id", userData.user.id);
-  if (error) throw error;
-}
-
-export type JoinResult = {
-  lesson_id: string;
-  title: string;
-  teacher_name: string | null;
-  already_member: boolean;
-};
-
-/**
- * Dołączenie kodem. Kod jest zaproszeniem, więc zapisu dokonuje funkcja
- * `security definer` w bazie — uczeń nie widzi lekcji, zanim do niej nie wejdzie.
- */
-export async function joinLessonByCode(rawCode: string): Promise<JoinResult> {
-  const code = normalizeJoinCode(rawCode);
-  if (code.length < 4) throw new Error("Kod jest za krótki.");
-  const { data, error } = await getSupabaseBrowser().rpc("english_join_lesson", { p_code: code });
-  if (error) throw new Error(error.message);
-  const result = (data ?? [])[0];
-  if (!result) throw new Error("Nie ma lekcji o tym kodzie.");
-  return result;
-}
-
-/** Kopia gotowego zestawu na własne konto — z prawem do edycji i eksportu. */
+/** Kopia gotowego zestawu na własne konto — bez przypisanego nauczyciela. */
 export async function copyLessonToMyAccount(sourceId: string, title?: string): Promise<string> {
   const { data, error } = await getSupabaseBrowser().rpc("english_copy_lesson", {
     p_source: sourceId,

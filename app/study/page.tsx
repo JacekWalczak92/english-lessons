@@ -8,7 +8,6 @@ import { StudySession } from "@/components/study/StudySession";
 function StudyRoute() {
   const searchParams = useSearchParams();
   const lessonId = searchParams.get("id") ?? "";
-  const lessonKey = searchParams.get("key") ?? "";
 
   if (!lessonId) {
     return (
@@ -24,7 +23,7 @@ function StudyRoute() {
     );
   }
 
-  return <StudySession lessonId={lessonId} lessonKey={lessonKey || undefined} />;
+  return <StudySession lessonId={lessonId} />;
 }
 
 export default function StudyPage() {

@@ -13,25 +13,21 @@ export {
   APP_ROLES,
   CARD_TYPES,
   FIELD_LIMITS,
-  JOIN_CODE_ALPHABET,
-  JOIN_CODE_LENGTH,
   LESSON_KINDS,
   LESSON_STATUSES,
   REVIEW_DIRECTIONS,
-  canAddCards,
-  canEditCard,
+  canAssignTeacher,
+  canChangeStatus,
+  canEditCards,
   canEditLessonMeta,
-  canManageAccess,
+  canEditStudentComment,
+  canManageLesson,
   defaultDirection,
   directionForTypeChange,
-  formatJoinCode,
   isAppRole,
   isCardType,
-  isCardVisible,
-  isLessonCard,
-  normalizeJoinCode,
 } from "./domain.ts";
-export type { CardAccessContext } from "./domain.ts";
+export type { LessonAccessContext } from "./domain.ts";
 
 export type Lesson = {
   id: string;
@@ -42,15 +38,13 @@ export type Lesson = {
   status: LessonStatus;
   lesson_kind: LessonKind;
   description: string;
-  share_enabled: boolean;
-  share_token?: string;
-  /** Kod dołączenia widzi tylko właściciel — uczeń dostaje go od nauczyciela. */
-  join_code?: string;
-  join_enabled: boolean;
+  /** Nauczyciel przypisany przez ucznia. `null` = własna lekcja nauczyciela. */
+  assigned_teacher_id: string | null;
+  assigned_at: string | null;
+  /** Czego uczeń oczekuje od tej lekcji — nauczyciel czyta to przed wypełnieniem. */
+  student_request: string;
   /** Zestaw opublikowany w bibliotece jest widoczny dla wszystkich uczniów. */
   is_published: boolean;
-  /** Czy uczniowie widzą nawzajem swoje fiszki. */
-  peer_visibility: boolean;
   card_count: number;
   source_lesson_id: string | null;
   drive_file_id: string | null;
@@ -64,19 +58,25 @@ export type AppProfile = {
   user_id: string;
   role: AppRole;
   display_name: string;
+  /** Nauczyciel może zniknąć z listy wyboru, gdy nie przyjmuje nowych uczniów. */
+  accepting_students: boolean;
 };
 
-export type LessonMember = {
-  lesson_id: string;
+/** Pozycja w katalogu nauczycieli, z którego uczeń wybiera prowadzącego. */
+export type TeacherDirectoryEntry = {
   user_id: string;
-  member_role: AppRole;
   display_name: string;
-  joined_at: string;
-  /** Liczba fiszek dodanych przez tego ucznia — dla panelu nauczyciela. */
-  card_count: number;
+  accepting_students: boolean;
 };
 
-/** Stan eksportu na Drive jest per konto: nauczyciel i każdy uczeń mają własny plik. */
+/** Druga strona lekcji: dla ucznia — nauczyciel, dla nauczyciela — uczeń. */
+export type LessonCounterpart = {
+  user_id: string;
+  display_name: string;
+  role: AppRole;
+} | null;
+
+/** Stan eksportu na Drive jest per konto: nauczyciel i uczeń mają własne pliki. */
 export type DriveState = {
   drive_file_id: string | null;
   drive_file_name: string | null;
@@ -86,7 +86,7 @@ export type DriveState = {
 export type LessonCard = {
   id: string;
   lesson_id: string;
-  /** `null` = fiszka lekcyjna dodana tajnym linkiem nauczyciela. */
+  /** Konto, które fiszkę utworzyło — od v1.7.0 zawsze nauczyciel. */
   author_id: string | null;
   card_type: CardType;
   english: string;
@@ -98,6 +98,8 @@ export type LessonCard = {
   example: string;
   british_variant: string;
   american_variant: string;
+  /** Jedyne pole fiszki, które wypełnia uczeń. */
+  student_comment: string;
   order_index: number;
   created_at: string;
   updated_at: string;
@@ -106,8 +108,9 @@ export type LessonCard = {
 export type LessonAccess = AccessMode;
 
 export type LessonViewer = {
-  user_id: string | null;
+  user_id: string;
   display_name: string;
+  role: AppRole;
   access: LessonAccess;
 };
 
@@ -115,14 +118,10 @@ export type LessonPayload = {
   lesson: Lesson;
   cards: LessonCard[];
   access: LessonAccess;
-  /** Id właściciela lekcji — po nim rozpoznajemy fiszki „od nauczyciela”. */
-  teacher_id: string;
   viewer: LessonViewer;
-  /** Mapa `user_id -> nazwa`, żeby pokazać autora fiszki bez pytania o profile. */
-  authors: Record<string, string>;
-  /** Lista uczniów — wypełniana tylko dla właściciela lekcji. */
-  members: LessonMember[];
-  /** Stan eksportu na Drive dla oglądającego (właściciela albo ucznia). */
+  /** Druga strona lekcji — pokazywana w nagłówku zamiast surowego identyfikatora. */
+  counterpart: LessonCounterpart;
+  /** Stan eksportu na Drive dla oglądającego. */
   drive: DriveState;
 };
 
@@ -135,7 +134,10 @@ export function isUnchanged(result: LessonPollResult): result is LessonUnchanged
   return (result as LessonUnchanged).unchanged === true;
 }
 
-/** Pola fiszki, które klient może modyfikować. Autor jest ustalany po stronie serwera. */
+/**
+ * Pola fiszki, które klient może modyfikować. Serwer i tak dzieli je po roli:
+ * nauczyciel zapisuje treść, uczeń wyłącznie `student_comment`.
+ */
 export type CardPatch = Partial<
   Omit<LessonCard, "id" | "lesson_id" | "author_id" | "created_at" | "updated_at">
 >;
@@ -149,15 +151,14 @@ export type LessonPatch = Partial<
     | "teacher_name"
     | "status"
     | "description"
-    | "share_enabled"
-    | "join_enabled"
+    | "student_request"
+    | "assigned_teacher_id"
     | "is_published"
-    | "peer_visibility"
   >
-> & { rotate_share_token?: true; rotate_join_code?: true };
+>;
 
 export type NewCardInput = Pick<LessonCard, "card_type" | "review_direction" | "order_index"> &
-  Partial<Omit<CardPatch, "card_type" | "review_direction" | "order_index">>;
+  Partial<Omit<CardPatch, "card_type" | "review_direction" | "order_index" | "student_comment">>;
 
 /** Nazwa lekcji-zestawu w bibliotece razem z licznikiem fiszek. */
 export type LibraryEntry = Pick<
@@ -218,12 +219,24 @@ export function buildLessonExport(
         reviewDirection: card.review_direction,
         phonetic: card.phonetic.trim(),
         pronunciation: card.pronunciation.trim(),
-        note: card.note.trim(),
+        note: noteWithComment(card),
         example: card.example.trim(),
         britishVariant: card.british_variant.trim(),
         americanVariant: card.american_variant.trim(),
       })),
   };
+}
+
+/**
+ * Komentarz ucznia doklejamy do notatki zamiast dodawać pole do formatu.
+ * `schemaVersion: 1` jest kontraktem z importerem AnkiFiszki v128 i nowy klucz
+ * mógłby wysadzić parser po tamtej stronie; notatka przechodzi bez zmian w kodzie.
+ */
+function noteWithComment(card: LessonCard): string {
+  const note = card.note.trim();
+  const comment = card.student_comment.trim();
+  if (!comment) return note;
+  return note ? `${note}\n\nKomentarz ucznia: ${comment}` : `Komentarz ucznia: ${comment}`;
 }
 
 /** Nazwa pliku na Drive — stabilna dla danej lekcji, żeby eksport nadpisywał, a nie duplikował. */

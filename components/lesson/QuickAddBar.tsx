@@ -6,22 +6,13 @@ import type { CardType } from "@/lib/types";
 export function QuickAddBar({
   locked,
   importOpen,
-  shareOpen,
-  isOwner,
-  isStudent,
   onAdd,
   onToggleImport,
-  onToggleShare,
 }: {
   locked: boolean;
   importOpen: boolean;
-  shareOpen: boolean;
-  isOwner: boolean;
-  /** Uczeń dodaje własne fiszki — warto o tym napisać wprost. */
-  isStudent: boolean;
   onAdd: (type: CardType) => void;
   onToggleImport: () => void;
-  onToggleShare: () => void;
 }) {
   return (
     <section className="panel quick-add" data-tour="quick-add">
@@ -46,21 +37,8 @@ export function QuickAddBar({
         ⇩ Importuj słówka
       </button>
 
-      {isOwner && (
-        <button
-          className="btn ghost small-btn"
-          aria-expanded={shareOpen}
-          data-tour="access"
-          onClick={onToggleShare}
-        >
-          👥 Dostęp i uczniowie
-        </button>
-      )}
-
       <span className="hint">
-        {isStudent
-          ? "Dodajesz własne fiszki — nauczyciel je widzi, a Ty nie ruszasz cudzych."
-          : "Zmiany zapisują się automatycznie i pojawiają się u pozostałych po kilku sekundach."}
+        Zmiany zapisują się automatycznie i pojawiają się u ucznia po kilku sekundach.
       </span>
     </section>
   );

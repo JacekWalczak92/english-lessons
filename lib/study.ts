@@ -1,4 +1,4 @@
-import { isLessonCard, type LessonCard, type ReviewDirection } from "./types.ts";
+import type { LessonCard, ReviewDirection } from "./types.ts";
 
 /**
  * Logika trybu nauki. Czysta i bez Reacta, żeby dało się ją przetestować —
@@ -7,7 +7,7 @@ import { isLessonCard, type LessonCard, type ReviewDirection } from "./types.ts"
  */
 
 export const STUDY_DIRECTIONS = ["card", "PL_TO_EN", "EN_TO_PL", "mixed"] as const;
-export const STUDY_SCOPES = ["all", "teacher", "mine", "hard"] as const;
+export const STUDY_SCOPES = ["all", "commented", "hard"] as const;
 
 export type StudyDirection = (typeof STUDY_DIRECTIONS)[number];
 export type StudyScope = (typeof STUDY_SCOPES)[number];
@@ -26,8 +26,6 @@ export type StudyItem = {
 };
 
 export type StudyScopeContext = {
-  viewerId: string | null;
-  teacherId: string | null;
   hardCardIds?: string[];
 };
 
@@ -45,12 +43,8 @@ export function filterByScope(
   context: StudyScopeContext,
 ): LessonCard[] {
   switch (scope) {
-    case "teacher":
-      return cards.filter((card) => isLessonCard(card.author_id, context.teacherId));
-    case "mine":
-      return cards.filter(
-        (card) => context.viewerId !== null && card.author_id === context.viewerId,
-      );
+    case "commented":
+      return cards.filter((card) => card.student_comment.trim().length > 0);
     case "hard": {
       const hard = new Set(context.hardCardIds ?? []);
       return cards.filter((card) => hard.has(card.id));

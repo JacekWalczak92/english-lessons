@@ -2,30 +2,38 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { formatJoinCode, type Lesson } from "@/lib/types";
+import type { Lesson } from "@/lib/types";
 
 /**
- * Jedna sekcja listy lekcji. Ta sama lista obsługuje lekcje nauczyciela,
- * gotowe zestawy i lekcje, do których uczeń dołączył — różnią się tylko
- * dostępnymi akcjami.
+ * Jedna sekcja listy lekcji. Ta sama lista obsługuje lekcje ucznia, lekcje
+ * przypisane nauczycielowi i gotowe zestawy — różnią się tylko akcjami
+ * i tym, czyje imię pokazujemy obok.
  */
 export function LessonList({
   title,
   emptyText,
   lessons,
-  showJoinCode = false,
+  names,
+  counterpartField,
   onDelete,
-  onLeave,
   footer,
 }: {
   title: string;
   emptyText: string;
   lessons: Lesson[];
-  showJoinCode?: boolean;
+  /** Mapa `user_id -> imię` dla drugiej strony lekcji. */
+  names?: Record<string, string>;
+  counterpartField?: "assigned_teacher_id" | "owner_id";
   onDelete?: (lesson: Lesson) => void;
-  onLeave?: (lesson: Lesson) => void;
   footer?: ReactNode;
 }) {
+  function counterpart(lesson: Lesson): string | null {
+    if (!counterpartField || !names) return null;
+    const id = counterpartField === "assigned_teacher_id" ? lesson.assigned_teacher_id : lesson.owner_id;
+    if (!id) return null;
+    return names[id] ?? null;
+  }
+
   return (
     <section className="dashboard-section">
       <div className="section-head">
@@ -51,16 +59,14 @@ export function LessonList({
                 <div className="lesson-title">{lesson.title}</div>
                 <div className="lesson-meta">
                   <span>{lesson.lesson_date}</span>
-                  {lesson.teacher_name && <span>• {lesson.teacher_name}</span>}
+                  {counterpart(lesson) && <span>• {counterpart(lesson)}</span>}
                   <span>• {lesson.card_count} fiszek</span>
                   <span className={`badge ${lesson.status === "finished" ? "finished" : ""}`}>
                     {lesson.status === "finished" ? "zakończona" : "w toku"}
                   </span>
                   {lesson.is_published && <span className="badge">opublikowany</span>}
-                  {showJoinCode && lesson.join_code && (
-                    <span className="badge muted-badge">
-                      {lesson.join_enabled ? `kod ${formatJoinCode(lesson.join_code)}` : "kod wyłączony"}
-                    </span>
+                  {lesson.card_count === 0 && lesson.assigned_teacher_id && (
+                    <span className="badge muted-badge">czeka na nauczyciela</span>
                   )}
                 </div>
               </div>
@@ -80,11 +86,6 @@ export function LessonList({
                 >
                   Otwórz
                 </Link>
-                {onLeave && (
-                  <button className="btn ghost small-btn" onClick={() => onLeave(lesson)}>
-                    Wypisz się
-                  </button>
-                )}
                 {onDelete && (
                   <button className="btn danger small-btn" onClick={() => onDelete(lesson)}>
                     Usuń
