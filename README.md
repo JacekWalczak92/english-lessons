@@ -1,4 +1,4 @@
-# J-Learner · English Lessons v1.7.1 — GitHub Pages edition
+# J-Learner · English Lessons v1.8.0 — GitHub Pages edition
 
 Statyczna miniaplikacja do fiszek z lekcji angielskiego.
 Frontend jest publikowany na **GitHub Pages**, dane są trzymane w **Supabase**, a dostęp obsługuje **Supabase Edge Function**. Eksport lekcji na Google Drive pozostaje zgodny z importerem AnkiFiszki v128.
@@ -11,6 +11,22 @@ Frontend jest publikowany na **GitHub Pages**, dane są trzymane w **Supabase**,
 4. Obie strony powtarzają materiał w trybie nauki i eksportują go na **swój** Google Drive.
 
 Nie ma już kodów dołączenia ani tajnych linków — dostęp wynika wyłącznie z konta.
+
+## Moje słówka — połączenie z aplikacją Słownik (od v1.8.0)
+
+Karta **Moje słówka** (`/words/`, przycisk na liście lekcji) zbiera słówka
+wyszukane w aplikacji **Słownik** na Androidzie. Są prywatne — widzi je tylko
+właściciel konta (tabela `english_my_words` z RLS).
+
+- **Z telefonu jednym kliknięciem:** Słownik → Historia → Eksportuj →
+  **Wyślij do J-Learner**. Telefon otwiera tę kartę z listą słówek, Ty klikasz
+  „Zapisz”. Adres aplikacji wpisuje się raz w ustawieniach Słownika.
+- **Plikiem:** „Zapisz plik dla J-Learner” w telefonie, potem **Importuj** tutaj.
+- Słówka są pogrupowane po dniu wyszukania, mają wyszukiwarkę, gwiazdki,
+  usuwanie i **🎓 Ucz się** (ta sama logika powtórki co w lekcjach).
+- Ponowny import nie robi duplikatów — porównujemy stronę angielską.
+
+Format wymiany: [`docs/slownik-words-format.md`](docs/slownik-words-format.md).
 
 ## Instruktaż przy pierwszym użyciu
 
@@ -253,7 +269,8 @@ Uruchom w **Supabase → SQL Editor**, w tej kolejności:
 supabase/migrations/20260824_english_lessons.sql          # jeśli jeszcze nie było
 supabase/migrations/20260904_english_lessons_accounts.sql # konta, kody, biblioteka
 supabase/migrations/20260905_english_role_lock.sql        # jeden tryb na konto
-supabase/migrations/20260906_english_assignments.sql     # nowość v1.7.0
+supabase/migrations/20260906_english_assignments.sql     # v1.7.0
+supabase/migrations/20261019_english_my_words.sql        # nowość v1.8.0 — Moje słówka
 ```
 
 Pierwsza migracja tworzy `english_lessons`, `english_lesson_cards`, RLS i triggery `updated_at`.

@@ -84,6 +84,11 @@ export const TOURS: Record<TourId, TourStep[]> = {
       title: "Biblioteka",
       body: "Gotowe zestawy od nauczycieli. „Skopiuj do moich lekcji” robi Twoją własną kopię do nauki.",
     },
+    {
+      target: "my-words",
+      title: "Moje słówka",
+      body: "Słówka wyszukane w aplikacji Słownik na telefonie. Wyślij je z telefonu przyciskiem „Wyślij do J-Learner” i powtarzaj tutaj.",
+    },
   ],
   "lesson-teacher": [
     {

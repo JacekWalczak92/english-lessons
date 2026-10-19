@@ -186,6 +186,9 @@ export default function DashboardPage() {
           <button className="btn ghost" onClick={tour.start}>
             ❔ Instrukcja
           </button>
+          <Link className="btn ghost" href="/words" data-tour="my-words">
+            Moje słówka
+          </Link>
           <Link className="btn ghost" href="/library" data-tour="library">
             Biblioteka
           </Link>

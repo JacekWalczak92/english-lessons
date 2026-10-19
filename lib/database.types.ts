@@ -80,6 +80,25 @@ export type ExportRow = {
 export type ExportInsert = Omit<ExportRow, "updated_at"> & { updated_at?: string };
 export type ExportUpdate = Partial<Omit<ExportRow, "lesson_id" | "user_id">>;
 
+export type MyWordRow = {
+  id: string;
+  user_id: string;
+  english: string;
+  polish: string;
+  source_lang: "en" | "pl";
+  kind: "word" | "sentence";
+  favorite: boolean;
+  looked_up_at: string | null;
+  source: string;
+  external_id: string | null;
+  /** Kolumna generowana w bazie — nie wysyłamy jej przy zapisie. */
+  dedupe_key: string;
+  created_at: string;
+};
+
+export type MyWordInsert = Omit<MyWordRow, "id" | "dedupe_key" | "created_at"> & { id?: string };
+export type MyWordUpdate = Partial<Pick<MyWordRow, "english" | "polish" | "favorite">>;
+
 export type Database = {
   public: {
     Tables: {
@@ -105,6 +124,12 @@ export type Database = {
         Row: ExportRow;
         Insert: ExportInsert;
         Update: ExportUpdate;
+        Relationships: [];
+      };
+      english_my_words: {
+        Row: MyWordRow;
+        Insert: MyWordInsert;
+        Update: MyWordUpdate;
         Relationships: [];
       };
     };

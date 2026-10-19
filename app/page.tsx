@@ -5,9 +5,15 @@ import { useRouter } from "next/navigation";
 import { Field } from "@/components/Field";
 import { MISSING_CONFIG_MESSAGE, getSupabaseBrowser, readPublicConfig } from "@/lib/supabase-browser";
 import { absoluteSiteUrl } from "@/lib/site-path";
+import { readPendingImport } from "@/lib/my-words";
 import { FIELD_LIMITS, type AppRole } from "@/lib/types";
 
 type Feedback = { kind: "success" | "error"; text: string } | null;
+
+/** Słówka wysłane z telefonu przed zalogowaniem czekają w karcie „Moje słówka”. */
+function afterLoginPath() {
+  return readPendingImport() ? "/words" : "/dashboard";
+}
 
 export default function HomePage() {
   const router = useRouter();
@@ -33,7 +39,7 @@ export default function HomePage() {
       .auth.getSession()
       .then(({ data }) => {
         if (!active) return;
-        if (data.session) router.replace("/dashboard");
+        if (data.session) router.replace(afterLoginPath());
         else setCheckingSession(false);
       })
       .catch(() => active && setCheckingSession(false));
@@ -52,7 +58,7 @@ export default function HomePage() {
       if (mode === "login") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        router.push("/dashboard");
+        router.push(afterLoginPath());
       } else {
         const { data, error } = await supabase.auth.signUp({
           email,
@@ -65,7 +71,7 @@ export default function HomePage() {
           },
         });
         if (error) throw error;
-        if (data.session) router.push("/dashboard");
+        if (data.session) router.push(afterLoginPath());
         else
           setFeedback({
             kind: "success",
