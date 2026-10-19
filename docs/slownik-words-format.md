@@ -1,6 +1,6 @@
 # Format `slownik-words` v1 — słówka ze Słownika do J-Learner
 
-Kontrakt między aplikacją **Słownik** (Android, repo `slownik-app`) a kartą
+Kontrakt między aplikacją **Słownik** (Android, repo `dictionary-app`) a kartą
 **Moje słówka** w J-Learner English Lessons. Ten sam plik leży w obu repozytoriach;
 zmieniasz go w jednym — kopiujesz do drugiego.
 
