@@ -1,7 +1,7 @@
 import type { LessonCard } from "./types.ts";
 
 /**
- * Format wymiany słówek ze Słownika (aplikacja na Androida) do karty
+ * Format wymiany słówek z J-Learner Vocabulary (aplikacja na Androida, dawniej „Słownik”) do karty
  * „Moje słówka”. Pełny opis: `docs/slownik-words-format.md`.
  *
  * Czysty moduł bez Reacta i Supabase — parsuje to, co przyszło z telefonu
@@ -121,7 +121,7 @@ function parseJson(text: string): WordsParseResult {
   if (!Array.isArray(list)) {
     return {
       words: [],
-      problems: [{ line: 0, message: "Brak listy „words” — to nie wygląda na eksport ze Słownika." }],
+      problems: [{ line: 0, message: "Brak listy „words” — to nie wygląda na eksport z J-Learner Vocabulary." }],
       duplicates: 0,
       format: "json",
     };
@@ -170,7 +170,7 @@ function parseJson(text: string): WordsParseResult {
 }
 
 /**
- * Starszy eksport Słownika „Kopiuj do schowka”: `angielski;polski`, jedna para
+ * Starszy eksport aplikacji „Kopiuj do schowka”: `angielski;polski`, jedna para
  * w linii. Tabulator też działa, więc przechodzi także plik TSV dla Anki.
  */
 function parseLines(text: string): WordsParseResult {

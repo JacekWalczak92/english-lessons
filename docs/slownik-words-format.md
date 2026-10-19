@@ -1,6 +1,6 @@
-# Format `slownik-words` v1 — słówka ze Słownika do J-Learner
+# Format `slownik-words` v1 — słówka z J-Learner Vocabulary do J-Learner English Lessons
 
-Kontrakt między aplikacją **Słownik** (Android, repo `dictionary-app`) a kartą
+Kontrakt między aplikacją **J-Learner Vocabulary** (Android, dawniej „Słownik”, repo `dictionary-app`) a kartą
 **Moje słówka** w J-Learner English Lessons. Ten sam plik leży w obu repozytoriach;
 zmieniasz go w jednym — kopiujesz do drugiego.
 
@@ -11,7 +11,7 @@ zmieniasz go w jednym — kopiujesz do drugiego.
   "format": "slownik-words",
   "schemaVersion": 1,
   "exportedAt": "2026-10-19T07:00:00.000Z",
-  "source": { "app": "SlownikApp", "version": "21.0" },
+  "source": { "app": "J-Learner Vocabulary", "version": "21.1" },
   "words": [
     {
       "id": "42",
@@ -38,7 +38,7 @@ zmieniasz go w jednym — kopiujesz do drugiego.
 | `words[].lookedUpAt` | nie | ISO 8601, kiedy słówko wyszukano — po tym web grupuje listę |
 | `words[].id` | nie | identyfikator w telefonie, tylko informacyjnie |
 
-Słownik zawsze zapisuje **angielski jako `english`**, także gdy słówko było
+Aplikacja zawsze zapisuje **angielski jako `english`**, także gdy słówko było
 wyszukane po polsku (zamienia strony tak samo jak eksport do Anki).
 
 ## Duplikaty

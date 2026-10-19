@@ -21,7 +21,7 @@ import { dedupeKey, localDay, readImportFromHash, type ImportedWord } from "@/li
 type Filter = "all" | "favorites" | string; // string = konkretny dzień yyyy-mm-dd
 
 /**
- * Karta „Moje słówka”: wszystko, co wyszukałem w aplikacji Słownik na telefonie.
+ * Karta „Moje słówka”: wszystko, co wyszukałem w aplikacji J-Learner Vocabulary na telefonie.
  *
  * Słówka przychodzą na trzy sposoby: „Wyślij do J-Learner” w telefonie otwiera
  * tę stronę z ładunkiem w `#import=…`, plik `.json` z eksportu albo wklejka
@@ -171,7 +171,7 @@ export default function WordsPage() {
           <div className="brand">J-Learner</div>
           <h1 style={{ marginBottom: 0 }}>Moje słówka</h1>
           <p className="muted small" style={{ marginTop: 6 }}>
-            Słówka wyszukane w aplikacji Słownik na telefonie. Widzisz je tylko Ty.
+            Słówka wyszukane w aplikacji J-Learner Vocabulary na telefonie. Widzisz je tylko Ty.
           </p>
         </div>
         <div className="topbar-actions">
@@ -224,7 +224,7 @@ export default function WordsPage() {
         <div className="panel empty">
           <h2>Nie masz jeszcze słówek</h2>
           <p>
-            W aplikacji Słownik otwórz <strong>Historia → Eksportuj → Wyślij do J-Learner</strong> albo
+            W aplikacji J-Learner Vocabulary otwórz <strong>Historia → Eksportuj → Wyślij do J-Learner</strong> albo
             zapisz plik .json i zaimportuj go tutaj.
           </p>
         </div>

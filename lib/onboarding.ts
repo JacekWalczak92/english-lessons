@@ -87,7 +87,7 @@ export const TOURS: Record<TourId, TourStep[]> = {
     {
       target: "my-words",
       title: "Moje słówka",
-      body: "Słówka wyszukane w aplikacji Słownik na telefonie. Wyślij je z telefonu przyciskiem „Wyślij do J-Learner” i powtarzaj tutaj.",
+      body: "Słówka wyszukane w aplikacji J-Learner Vocabulary na telefonie. Wyślij je z telefonu przyciskiem „Wyślij do J-Learner” i powtarzaj tutaj.",
     },
   ],
   "lesson-teacher": [

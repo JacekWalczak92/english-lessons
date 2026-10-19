@@ -7,7 +7,7 @@ import type { ImportedWord } from "@/lib/word-export-format";
 const PREVIEW_LIMIT = 8;
 
 /**
- * Import słówek ze Słownika: plik `.json` z telefonu, wklejka albo ładunek,
+ * Import słówek z J-Learner Vocabulary: plik `.json` z telefonu, wklejka albo ładunek,
  * który przyszedł w adresie (`#import=…`) po kliknięciu „Wyślij do J-Learner”.
  * Przed zapisem pokazuje, ile słówek jest nowych, a ile już jest na koncie.
  */
@@ -52,11 +52,11 @@ export function WordImportPanel({
     <section className="panel import-panel" data-tour="words-import">
       <div className="section-head import-head">
         <div>
-          <h2>{fromPhone ? "Słówka z telefonu" : "Importuj słówka ze Słownika"}</h2>
+          <h2>{fromPhone ? "Słówka z telefonu" : "Importuj słówka z telefonu"}</h2>
           <p className="small muted" style={{ margin: "4px 0 0" }}>
             {fromPhone
               ? "Sprawdź listę i zapisz ją na swoim koncie."
-              : "Wybierz plik .json wyeksportowany w aplikacji Słownik albo wklej listę „angielski;polski”."}
+              : "Wybierz plik .json wyeksportowany w aplikacji J-Learner Vocabulary albo wklej listę „angielski;polski”."}
           </p>
         </div>
         <button className="btn ghost small-btn" onClick={onClose}>
