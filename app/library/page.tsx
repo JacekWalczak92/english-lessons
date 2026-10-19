@@ -97,9 +97,14 @@ export default function LibraryPage() {
             edytować i wyeksportować na swój Drive.
           </p>
         </div>
-        <Link className="btn ghost small-btn" href="/dashboard">
-          ← Moje lekcje
-        </Link>
+        <div className="topbar-actions">
+          <Link className="btn ghost small-btn" href="/words">
+            Moje słówka
+          </Link>
+          <Link className="btn ghost small-btn" href="/dashboard">
+            ← Moje lekcje
+          </Link>
+        </div>
       </div>
 
       {error && (

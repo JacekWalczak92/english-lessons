@@ -284,3 +284,14 @@ h2 { margin: 0; }
 @media (max-width: 720px) {
   .new-lesson-form { grid-template-columns: 1fr; }
 }
+
+/* --- v1.8.0: karta „Moje słówka” (import ze Słownika na Androidzie) --- */
+.words-toolbar { padding: 16px; margin-bottom: 18px; display: grid; gap: 12px; }
+.word-list { list-style: none; margin: 0; padding: 6px 0; }
+.word-list li {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center;
+  padding: 10px 16px; border-top: 1px solid var(--border);
+}
+.word-list li:first-child { border-top: none; }
+.word-list li.selected { background: #eef4fc; }
+.word-list input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
