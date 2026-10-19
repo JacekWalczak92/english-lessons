@@ -92,7 +92,7 @@ export default function HomePage() {
     <main className="center-shell">
       <section className="panel auth-panel">
         <div className="brand">J-Learner</div>
-        <h1>English Lessons</h1>
+        <h1>J-Learner Vocabulary</h1>
         <p className="muted">
           Fiszki z lekcji angielskiego w jednym miejscu. Uczeń zamawia lekcję u wybranego
           nauczyciela, nauczyciel wypełnia ją słówkami, uczeń dopisuje komentarze i powtarza.

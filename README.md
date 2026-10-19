@@ -1,4 +1,7 @@
-# J-Learner · English Lessons v1.8.0 — GitHub Pages edition
+# J-Learner Vocabulary v1.8.1 — GitHub Pages edition
+
+Aplikacja webowa (dawniej „J-Learner · English Lessons”). Ta sama nazwa ma aplikacja na telefon,
+z której przychodzą słówka do karty „Moje słówka”.
 
 Statyczna miniaplikacja do fiszek z lekcji angielskiego.
 Frontend jest publikowany na **GitHub Pages**, dane są trzymane w **Supabase**, a dostęp obsługuje **Supabase Edge Function**. Eksport lekcji na Google Drive pozostaje zgodny z importerem AnkiFiszki v128.
@@ -12,15 +15,15 @@ Frontend jest publikowany na **GitHub Pages**, dane są trzymane w **Supabase**,
 
 Nie ma już kodów dołączenia ani tajnych linków — dostęp wynika wyłącznie z konta.
 
-## Moje słówka — połączenie z aplikacją Słownik (od v1.8.0)
+## Moje słówka — połączenie z aplikacją J-Learner Vocabulary (od v1.8.0)
 
 Karta **Moje słówka** (`/words/`, przycisk na liście lekcji) zbiera słówka
-wyszukane w aplikacji **Słownik** na Androidzie. Są prywatne — widzi je tylko
+wyszukane w aplikacji **J-Learner Vocabulary** na Androidzie (dawniej „Słownik”). Są prywatne — widzi je tylko
 właściciel konta (tabela `english_my_words` z RLS).
 
-- **Z telefonu jednym kliknięciem:** Słownik → Historia → Eksportuj →
+- **Z telefonu jednym kliknięciem:** J-Learner Vocabulary → Historia → Eksportuj →
   **Wyślij do J-Learner**. Telefon otwiera tę kartę z listą słówek, Ty klikasz
-  „Zapisz”. Adres aplikacji wpisuje się raz w ustawieniach Słownika.
+  „Zapisz”. Adres aplikacji wpisuje się raz w ustawieniach aplikacji.
 - **Plikiem:** „Zapisz plik dla J-Learner” w telefonie, potem **Importuj** tutaj.
 - Słówka są pogrupowane po dniu wyszukania, mają wyszukiwarkę, gwiazdki,
   usuwanie i **🎓 Ucz się** (ta sama logika powtórki co w lekcjach).

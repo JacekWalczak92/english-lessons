@@ -3,7 +3,7 @@ import type { NewCardInput } from "./types.ts";
 
 export const IMPORT_COLUMNS = "POLSKI;ANGIELSKI;TYP;NOTATKA;WYMOWA;PRZYKŁAD";
 
-export const IMPORT_AI_PROMPT = `Przerób moje surowe notatki z lekcji angielskiego na format importu do J-Learner · English Lessons.
+export const IMPORT_AI_PROMPT = `Przerób moje surowe notatki z lekcji angielskiego na format importu do J-Learner Vocabulary.
 
 Zwróć WYŁĄCZNIE gotowe wiersze danych, bez nagłówka, komentarzy, numeracji ani Markdown.
 Każda fiszka ma być w osobnym wierszu w formacie:

@@ -187,7 +187,7 @@ export function LessonEditor({ lessonId }: { lessonId: string }) {
     <main className="shell">
       <div className="topbar">
         <div>
-          <div className="brand">J-Learner · English Lessons</div>
+          <div className="brand">J-Learner Vocabulary</div>
           <div className="lesson-meta" style={{ marginTop: 6 }}>
             <span className={`badge ${lesson.status === "finished" ? "finished" : ""}`}>
               {lesson.status === "finished" ? "zakończona" : "w toku"}
