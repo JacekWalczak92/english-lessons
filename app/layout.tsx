@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "J-Learner · English Lessons",
+  title: "J-Learner Vocabulary",
   description: "Wspólny edytor fiszek z lekcji angielskiego",
 };
 

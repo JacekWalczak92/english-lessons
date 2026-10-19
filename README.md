@@ -1,4 +1,7 @@
-# J-Learner · English Lessons v1.8.0 — GitHub Pages edition
+# J-Learner Vocabulary v1.8.1 — GitHub Pages edition
+
+Aplikacja webowa (dawniej „J-Learner · English Lessons”). Ta sama nazwa ma aplikacja na telefon,
+z której przychodzą słówka do karty „Moje słówka”.
 
 Statyczna miniaplikacja do fiszek z lekcji angielskiego.
 Frontend jest publikowany na **GitHub Pages**, dane są trzymane w **Supabase**, a dostęp obsługuje **Supabase Edge Function**. Eksport lekcji na Google Drive pozostaje zgodny z importerem AnkiFiszki v128.
