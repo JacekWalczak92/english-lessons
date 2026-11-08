@@ -17,6 +17,8 @@ export function LessonList({
   counterpartField,
   onDelete,
   footer,
+  selected,
+  onToggleSelect,
 }: {
   title: string;
   emptyText: string;
@@ -26,6 +28,9 @@ export function LessonList({
   counterpartField?: "assigned_teacher_id" | "owner_id";
   onDelete?: (lesson: Lesson) => void;
   footer?: ReactNode;
+  /** Zaznaczone lekcje do „Ucz się razem” / „Połącz w nowy zestaw”. */
+  selected?: ReadonlySet<string>;
+  onToggleSelect?: (lesson: Lesson) => void;
 }) {
   function counterpart(lesson: Lesson): string | null {
     if (!counterpartField || !names) return null;
@@ -55,7 +60,23 @@ export function LessonList({
               key={lesson.id}
               data-tour={index === 0 ? "lesson-row" : undefined}
             >
-              <div>
+              <div className="lesson-row-main">
+                {onToggleSelect && (
+                  <input
+                    type="checkbox"
+                    className="lesson-select"
+                    checked={selected?.has(lesson.id) ?? false}
+                    disabled={lesson.card_count === 0}
+                    onChange={() => onToggleSelect(lesson)}
+                    aria-label={`Zaznacz lekcję ${lesson.title} do łączenia`}
+                    title={
+                      lesson.card_count === 0
+                        ? "Lekcja nie ma jeszcze fiszek"
+                        : "Zaznacz, żeby uczyć się razem z innymi lekcjami"
+                    }
+                  />
+                )}
+                <div>
                 <div className="lesson-title">{lesson.title}</div>
                 <div className="lesson-meta">
                   <span>{lesson.lesson_date}</span>
@@ -68,6 +89,7 @@ export function LessonList({
                   {lesson.card_count === 0 && lesson.assigned_teacher_id && (
                     <span className="badge muted-badge">czeka na nauczyciela</span>
                   )}
+                </div>
                 </div>
               </div>
               <div className="btn-row">

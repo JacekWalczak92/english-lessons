@@ -20,9 +20,23 @@ import {
 } from "@/lib/study";
 import { clearProgress, hardCardIds, readProgress, recordAnswer } from "@/lib/study-progress";
 import { TYPE_LABELS } from "@/lib/card-labels";
-import { isUnchanged, type LessonPayload } from "@/lib/types";
+import { listMyWords } from "@/lib/my-words";
+import { MY_WORDS_SOURCE, mergeCards, type MergeSource } from "@/lib/merge";
+import { isUnchanged, type LessonCard } from "@/lib/types";
+import { wordAsCard } from "@/lib/word-export-format";
 
 type Phase = "loading" | "setup" | "running" | "summary" | "error";
+
+/** Fiszki do nauki — z jednej lekcji albo sklejone z kilku. */
+type StudyData = {
+  title: string;
+  sources: Array<{ id: string; title: string }>;
+  cards: LessonCard[];
+  /** cardId → lekcja, z której pochodzi fiszka. */
+  origin: Record<string, string>;
+  duplicates: number;
+  viewerId: string | null;
+};
 
 const DIRECTION_LABELS: Array<{ value: StudyDirection; label: string; hint: string }> = [
   { value: "card", label: "Jak na fiszce", hint: "kierunek ustawiony przy dodawaniu" },
@@ -32,16 +46,25 @@ const DIRECTION_LABELS: Array<{ value: StudyDirection; label: string; hint: stri
 ];
 
 /**
- * Powtórka słówek z jednej lekcji.
+ * Powtórka słówek z jednej lekcji albo z kilku naraz („Ucz się razem”).
+ * Przy kilku lekcjach to samo słówko pojawia się raz, a postęp „do poprawki”
+ * dalej zapisuje się osobno w każdej lekcji.
  *
  * Sesja trwa, dopóki każda fiszka nie zostanie raz zaliczona: „powtórz”
  * odkłada ją o kilka pozycji dalej zamiast usuwać. Wynik ląduje w localStorage,
  * więc następnym razem można wrócić samymi trudnymi słówkami.
  */
-export function StudySession({ lessonId }: { lessonId: string }) {
+export function StudySession({
+  lessonIds,
+  withMyWords = false,
+}: {
+  lessonIds: string[];
+  withMyWords?: boolean;
+}) {
   const [phase, setPhase] = useState<Phase>("loading");
   const [error, setError] = useState("");
-  const [data, setData] = useState<LessonPayload | null>(null);
+  const [data, setData] = useState<StudyData | null>(null);
+  const idsKey = lessonIds.join(",");
 
   const [scope, setScope] = useState<StudyScope>("all");
   const [direction, setDirection] = useState<StudyDirection>("card");
@@ -57,11 +80,33 @@ export function StudySession({ lessonId }: { lessonId: string }) {
     let active = true;
     (async () => {
       try {
-        const result = await lessonApi.get({ lessonId });
+        const ids = idsKey ? idsKey.split(",") : [];
+        const [payloads, words] = await Promise.all([
+          Promise.all(ids.map((lessonId) => lessonApi.get({ lessonId }))),
+          withMyWords ? listMyWords() : Promise.resolve([]),
+        ]);
         if (!active) return;
-        if (isUnchanged(result)) throw new Error("Nieoczekiwana odpowiedź serwera.");
-        setData(result);
-        setHard(hardCardIds(readProgress(lessonId)));
+        const sources: MergeSource[] = payloads.map((result) => {
+          if (isUnchanged(result)) throw new Error("Nieoczekiwana odpowiedź serwera.");
+          return { id: result.lesson.id, title: result.lesson.title, cards: result.cards };
+        });
+        if (withMyWords) {
+          sources.push({ id: MY_WORDS_SOURCE, title: "Moje słówka", cards: words.map(wordAsCard) });
+        }
+        const merged = mergeCards(sources);
+        const first = payloads[0];
+        setData({
+          title:
+            sources.length === 1
+              ? sources[0].title
+              : `Razem: ${sources.map((source) => source.title).join(" + ")}`,
+          sources: sources.map(({ id, title }) => ({ id, title })),
+          cards: merged.cards,
+          origin: merged.origin,
+          duplicates: merged.duplicates,
+          viewerId: first && !isUnchanged(first) ? first.viewer.user_id : null,
+        });
+        setHard(collectHard(sources.map((source) => source.id)));
         setPhase("setup");
       } catch (e) {
         if (!active) return;
@@ -72,9 +117,15 @@ export function StudySession({ lessonId }: { lessonId: string }) {
     return () => {
       active = false;
     };
-  }, [lessonId]);
+  }, [idsKey, withMyWords]);
 
-  const tour = useTour("study", data?.viewer.user_id ?? null, phase === "setup");
+  const tour = useTour("study", data?.viewerId ?? null, phase === "setup");
+  const sourceIds = useMemo(() => data?.sources.map((source) => source.id) ?? [], [data]);
+  const multi = sourceIds.length > 1;
+  const sourceTitle = useMemo(
+    () => Object.fromEntries((data?.sources ?? []).map((source) => [source.id, source.title])),
+    [data],
+  );
 
   const scopeContext = useMemo(() => ({ hardCardIds: hard }), [hard]);
 
@@ -113,7 +164,7 @@ export function StudySession({ lessonId }: { lessonId: string }) {
     (correct: boolean) => {
       const cardId = queue[0];
       if (!cardId) return;
-      recordAnswer(lessonId, cardId, correct);
+      recordAnswer(data?.origin[cardId] ?? sourceIds[0] ?? "", cardId, correct);
       setStats((current) => countStats(current, correct));
       if (!correct) {
         setMissed((current) => (current.includes(cardId) ? current : [...current, cardId]));
@@ -122,11 +173,11 @@ export function StudySession({ lessonId }: { lessonId: string }) {
       setQueue(nextQueue);
       setRevealed(false);
       if (nextQueue.length === 0) {
-        setHard(hardCardIds(readProgress(lessonId)));
+        setHard(collectHard(sourceIds));
         setPhase("summary");
       }
     },
-    [lessonId, queue],
+    [data, sourceIds, queue],
   );
 
   const current = queue.length > 0 ? items[queue[0]] : null;
@@ -158,11 +209,16 @@ export function StudySession({ lessonId }: { lessonId: string }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [answer, phase, revealed]);
 
-  const backLink = (
-    <Link className="btn ghost small-btn" href={`/lesson/?id=${encodeURIComponent(lessonId)}`}>
-      ← Do lekcji
-    </Link>
-  );
+  const backLink =
+    multi || sourceIds[0] === MY_WORDS_SOURCE || sourceIds.length === 0 ? (
+      <Link className="btn ghost small-btn" href="/dashboard">
+        ← Moje lekcje
+      </Link>
+    ) : (
+      <Link className="btn ghost small-btn" href={`/lesson/?id=${encodeURIComponent(sourceIds[0])}`}>
+        ← Do lekcji
+      </Link>
+    );
 
   if (phase === "loading") {
     return (
@@ -198,9 +254,11 @@ export function StudySession({ lessonId }: { lessonId: string }) {
         <div className="topbar">
           <div>
             <div className="brand">J-Learner · Nauka</div>
-            <h1 style={{ marginBottom: 0 }}>{data.lesson.title}</h1>
+            <h1 style={{ marginBottom: 0 }}>{data.title}</h1>
             <div className="lesson-meta" style={{ marginTop: 6 }}>
               <span>{counts.all} słówek do powtórki</span>
+              {multi && <span>• {sourceIds.length} źródła</span>}
+              {data.duplicates > 0 && <span>• {data.duplicates} powtórzeń pominięto</span>}
               {counts.skipped > 0 && <span>• {counts.skipped} pominięto (niepełna fiszka)</span>}
             </div>
           </div>
@@ -250,7 +308,7 @@ export function StudySession({ lessonId }: { lessonId: string }) {
               <button
                 className="link-btn"
                 onClick={() => {
-                  clearProgress(lessonId);
+                  for (const id of sourceIds) clearProgress(id);
                   setHard([]);
                 }}
               >
@@ -261,7 +319,9 @@ export function StudySession({ lessonId }: { lessonId: string }) {
 
           {counts.all === 0 && (
             <p className="warning small">
-              Ta lekcja nie ma jeszcze fiszek z wypełnionymi obiema stronami.
+              {multi
+                ? "Zaznaczone lekcje nie mają fiszek z wypełnionymi obiema stronami."
+                : "Ta lekcja nie ma jeszcze fiszek z wypełnionymi obiema stronami."}
             </p>
           )}
         </section>
@@ -331,7 +391,7 @@ export function StudySession({ lessonId }: { lessonId: string }) {
         <div>
           <div className="brand">J-Learner · Nauka</div>
           <div className="lesson-meta" style={{ marginTop: 6 }}>
-            <span>{data.lesson.title}</span>
+            <span>{data.title}</span>
             <span>• zostało {queue.length}</span>
             <span>• trafione {stats.correct}</span>
           </div>
@@ -355,6 +415,11 @@ export function StudySession({ lessonId }: { lessonId: string }) {
                 ? "PL → EN"
                 : "EN → PL"}
           </span>
+          {multi && data.origin[current.cardId] && (
+            <span className="badge muted-badge" title="Z której lekcji jest ta fiszka">
+              {sourceTitle[data.origin[current.cardId]]}
+            </span>
+          )}
         </div>
 
         <p className="study-question">{current.question}</p>
@@ -402,4 +467,9 @@ export function StudySession({ lessonId }: { lessonId: string }) {
       </section>
     </main>
   );
+}
+
+/** „Do poprawki” ze wszystkich źródeł — postęp jest zapisany per lekcja. */
+function collectHard(sourceIds: string[]): string[] {
+  return sourceIds.flatMap((id) => hardCardIds(readProgress(id)));
 }

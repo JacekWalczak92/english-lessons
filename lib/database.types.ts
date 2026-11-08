@@ -139,6 +139,10 @@ export type Database = {
         Args: { p_source: string; p_title?: string | null };
         Returns: string;
       };
+      english_merge_lessons: {
+        Args: { p_sources: string[]; p_title?: string | null };
+        Returns: string;
+      };
     };
     Enums: Record<never, never>;
     CompositeTypes: Record<never, never>;

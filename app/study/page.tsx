@@ -4,12 +4,15 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { StudySession } from "@/components/study/StudySession";
+import { parseLessonIds } from "@/lib/merge";
 
 function StudyRoute() {
   const searchParams = useSearchParams();
-  const lessonId = searchParams.get("id") ?? "";
+  // `?id=` to nauka jednej lekcji, `?ids=a,b,c` — kilku naraz („Ucz się razem”).
+  const lessonIds = parseLessonIds(searchParams.get("ids"), searchParams.get("id"));
+  const withMyWords = searchParams.get("words") === "1";
 
-  if (!lessonId) {
+  if (lessonIds.length === 0 && !withMyWords) {
     return (
       <main className="center-shell">
         <div className="panel auth-panel">
@@ -23,7 +26,7 @@ function StudyRoute() {
     );
   }
 
-  return <StudySession lessonId={lessonId} />;
+  return <StudySession key={`${lessonIds.join(",")}|${withMyWords}`} lessonIds={lessonIds} withMyWords={withMyWords} />;
 }
 
 export default function StudyPage() {
