@@ -203,3 +203,24 @@ export async function copyLessonToMyAccount(sourceId: string, title?: string): P
   if (error) throw new Error(error.message);
   return data as string;
 }
+
+/**
+ * „Połącz w nowy zestaw”: nowa lekcja z fiszek kilku lekcji, bez duplikatów.
+ * Kolejność `lessonIds` ma znaczenie — przy powtórzonym słówku zostaje fiszka
+ * z lekcji wcześniej na liście. Oryginały się nie zmieniają.
+ */
+export async function mergeLessons(lessonIds: string[], title: string): Promise<string> {
+  const { data, error } = await getSupabaseBrowser().rpc("english_merge_lessons", {
+    p_sources: lessonIds,
+    p_title: title,
+  });
+  if (error) {
+    if (/english_merge_lessons/.test(error.message) || error.code === "PGRST202") {
+      throw new Error(
+        "Łączenie lekcji wymaga migracji 20261108_english_merge_lessons.sql w Supabase.",
+      );
+    }
+    throw new Error(error.message);
+  }
+  return data as string;
+}

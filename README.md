@@ -1,4 +1,4 @@
-# J-Learner Vocabulary v1.8.1 — GitHub Pages edition
+# J-Learner Vocabulary v1.9.0 — GitHub Pages edition
 
 Aplikacja webowa (dawniej „J-Learner · English Lessons”). Ta sama nazwa ma aplikacja na telefon,
 z której przychodzą słówka do karty „Moje słówka”.
@@ -30,6 +30,20 @@ właściciel konta (tabela `english_my_words` z RLS).
 - Ponowny import nie robi duplikatów — porównujemy stronę angielską.
 
 Format wymiany: [`docs/slownik-words-format.md`](docs/slownik-words-format.md).
+
+## Łączenie słówek z kilku lekcji (od v1.9.0)
+
+Na liście lekcji każda lekcja z fiszkami ma pole wyboru. Po zaznaczeniu
+pojawia się pasek na dole ekranu:
+
+- **🎓 Ucz się razem** otwiera naukę z fiszkami ze wszystkich zaznaczonych lekcji
+  (`/study/?ids=a,b,c`). To samo słówko pokazuje się raz, na fiszce widać, z której
+  lekcji pochodzi, a „do poprawki” zapisuje się dalej osobno w każdej lekcji.
+  Przełącznik **+ Moje słówka** dokłada słówka z telefonu.
+- **Połącz w nowy zestaw** tworzy nową lekcję z kopią fiszek (bez duplikatów;
+  przy powtórzeniu zostaje fiszka z lekcji wyżej na liście). Oryginały zostają.
+  Działa przez funkcję `english_merge_lessons` z migracji
+  `supabase/migrations/20261108_english_merge_lessons.sql`.
 
 ## Instruktaż przy pierwszym użyciu
 

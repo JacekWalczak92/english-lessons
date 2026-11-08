@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { LessonList } from "@/components/dashboard/LessonList";
+import { MergeBar } from "@/components/dashboard/MergeBar";
 import { NewLessonPanel } from "@/components/dashboard/NewLessonPanel";
 import { TourOverlay } from "@/components/onboarding/TourOverlay";
 import {
@@ -13,6 +14,7 @@ import {
   listTeachers,
   loadDisplayNames,
   loadProfile,
+  mergeLessons,
   updateProfileSettings,
 } from "@/lib/account";
 import { dashboardTour } from "@/lib/onboarding";
@@ -39,6 +41,8 @@ export default function DashboardPage() {
   const [busy, setBusy] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
+  const [merging, setMerging] = useState(false);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -131,10 +135,41 @@ export default function DashboardPage() {
     }
   }
 
+  function toggleSelect(lesson: Lesson) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(lesson.id)) next.delete(lesson.id);
+      else next.add(lesson.id);
+      return next;
+    });
+  }
+
+  async function mergeSelected(title: string) {
+    if (merging) return;
+    setMerging(true);
+    setError("");
+    try {
+      const id = await mergeLessons(
+        selectedLessons.map((lesson) => lesson.id),
+        title,
+      );
+      router.push(`/lesson/?id=${encodeURIComponent(id)}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Nie udało się połączyć lekcji.");
+      setMerging(false);
+    }
+  }
+
   async function removeLesson(lesson: Lesson) {
     if (!window.confirm(`Usunąć „${lesson.title}” razem z fiszkami?`)) return;
     const snapshot = owned;
     setOwned((current) => current.filter((item) => item.id !== lesson.id));
+    setSelectedIds((current) => {
+      if (!current.has(lesson.id)) return current;
+      const next = new Set(current);
+      next.delete(lesson.id);
+      return next;
+    });
     try {
       await deleteLesson(lesson.id);
     } catch (e) {
@@ -164,6 +199,13 @@ export default function DashboardPage() {
   const isTeacher = profile?.role === "teacher";
   const ownLessons = owned.filter((lesson) => lesson.lesson_kind === "lesson");
   const sets = owned.filter((lesson) => lesson.lesson_kind === "set");
+  // Kolejność jak na ekranie (od najnowszej) — przy powtórzonym słówku
+  // zostaje fiszka z lekcji wyżej na liście.
+  const selectedLessons = useMemo(
+    () => [...assigned, ...owned].filter((lesson) => selectedIds.has(lesson.id)),
+    [assigned, owned, selectedIds],
+  );
+  const selection = { selected: selectedIds, onToggleSelect: toggleSelect };
 
   return (
     <main className="shell">
@@ -259,18 +301,21 @@ export default function DashboardPage() {
             lessons={assigned}
             names={names}
             counterpartField="owner_id"
+            {...selection}
           />
           <LessonList
             title="Moje lekcje"
             emptyText="Własne lekcje przydają się na materiał przygotowany bez konkretnego ucznia."
             lessons={ownLessons}
             onDelete={(lesson) => void removeLesson(lesson)}
+            {...selection}
           />
           <LessonList
             title="Gotowe zestawy słówek"
             emptyText="Zestaw to gotowa lista słówek, którą publikujesz w bibliotece."
             lessons={sets}
             onDelete={(lesson) => void removeLesson(lesson)}
+            {...selection}
           />
         </>
       ) : (
@@ -281,8 +326,16 @@ export default function DashboardPage() {
           names={names}
           counterpartField="assigned_teacher_id"
           onDelete={(lesson) => void removeLesson(lesson)}
+          {...selection}
         />
       )}
+
+      <MergeBar
+        lessons={selectedLessons}
+        busy={merging}
+        onMerge={(title) => void mergeSelected(title)}
+        onClear={() => setSelectedIds(new Set())}
+      />
 
       {tour.active && <TourOverlay steps={tour.steps} onFinish={tour.finish} />}
     </main>
